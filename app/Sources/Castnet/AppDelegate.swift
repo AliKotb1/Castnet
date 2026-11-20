@@ -29,6 +29,7 @@ enum AppActions {
     static var changeAddress: (DownloadItem) -> Void = { _ in }
     static var confirmDelete: ([DownloadItem]) -> Void = { _ in }
     static var showBatch: (String?) -> Void = { _ in }
+    static var showUpdate: (AppUpdate) -> Void = { _ in }
     /// Clipboard change made by Castnet itself (Copy Address), ignored by the clipboard monitor.
     static var ownClipboardChange = -1
 
@@ -94,6 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         AppActions.changeAddress = { [weak self] in self?.showChangeAddress($0) }
         AppActions.confirmDelete = { [weak self] in self?.confirmDelete($0) }
         AppActions.showBatch = { [weak self] in self?.showBatch(text: $0) }
+        AppActions.showUpdate = { [weak self] in self?.offerUpdate($0, manual: true) }
+        // A plain "terminate" signal (scripts, some shutdowns) quits like the Quit menu: the list is
+        // saved and downloads are paused so they continue later.
+        signal(SIGTERM, SIG_IGN)
+        let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        term.setEventHandler { NSApp.terminate(nil) }
+        term.resume()
+        termSource = term
+        resumeAfterUpdate()
         if !headless {
             buildMainMenu()
             buildStatusItem()
@@ -158,7 +168,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
 
         UNUserNotificationCenter.current().delegate = self
-        if headless { return }
+        if headless {
+            // Tests: a test copy installs an update from a local feed by itself (no windows).
+            if testMode, ProcessInfo.processInfo.environment["CASTNET_TEST_AUTO_UPDATE"] != nil {
+                Task { [weak self] in if let u = await UpdateChecker.check() { self?.installUpdate(u) } }
+            }
+            return
+        }
         showMainWindow()
         if !manager.extensionEverConnected { showSetup() }
         runMaintenance()
@@ -186,8 +202,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         Task.detached(priority: .background) { await ExtractorUpdater.updateIfDue() }
         Task { [weak self] in
             let update = await UpdateChecker.check()
-            await MainActor.run { self?.manager.availableUpdate = update }
+            await MainActor.run {
+                self?.manager.availableUpdate = update
+                if let u = update { self?.offerUpdate(u, manual: false) }
+            }
         }
+    }
+
+    // MARK: app updates (offered in a window, downloaded and installed inside the app)
+
+    private var updateWindow: NSWindow?
+    private var termSource: DispatchSourceSignal?
+    private let updateModel = UpdateModel()
+    private var offeredThisSession: String?
+
+    func offerUpdate(_ u: AppUpdate, manual: Bool) {
+        guard !headless else { return }
+        if !manual {
+            if Paths.defaults.string(forKey: "SkippedUpdate") == u.version || offeredThisSession == u.version { return }
+        }
+        offeredThisSession = u.version
+        if updateModel.update != u || updateWindow == nil { updateModel.phase = .offer }
+        updateModel.update = u
+        if updateWindow == nil {
+            let close: () -> Void = { [weak self] in self?.updateWindow?.close() }
+            let view = UpdateView(model: updateModel,
+                                  install: { [weak self] in if let u = self?.updateModel.update { self?.installUpdate(u) } },
+                                  later: close,
+                                  skip: { [weak self] in
+                                      if let v = self?.updateModel.update?.version { Paths.defaults.set(v, forKey: "SkippedUpdate") }
+                                      close()
+                                  },
+                                  openInBrowser: { [weak self] in
+                                      if let s = self?.updateModel.update?.url, let url = URL(string: s) { NSWorkspace.shared.open(url) }
+                                  })
+            updateWindow = makeWindow("Software Update", view, size: NSSize(width: 520, height: 420))
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        updateWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func installUpdate(_ u: AppUpdate) {
+        if case .downloading = updateModel.phase { return }
+        if updateModel.phase == .installing { return }
+        updateModel.phase = .downloading(0)
+        let model = updateModel
+        Task { [weak self] in
+            do {
+                let dmg = try await AppInstaller().download(u) { p in DispatchQueue.main.async { model.phase = .downloading(p) } }
+                await MainActor.run { model.phase = .installing }
+                let app = Bundle.main.bundleURL
+                try await Task.detached { try AppInstaller.install(dmg: dmg, expectedVersion: u.version, replacing: app) }.value
+                try? FileManager.default.removeItem(at: dmg)
+                await MainActor.run {
+                    guard let self else { return }
+                    // Downloads in progress continue after the update.
+                    Paths.defaults.set(self.manager.items.filter { $0.state.isActive }.map(\.id.uuidString), forKey: "ResumeAfterUpdate")
+                    AppInstaller.relaunch(app)
+                    NSApp.terminate(nil)
+                }
+            } catch {
+                await MainActor.run { model.phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription) }
+            }
+        }
+    }
+
+    private func resumeAfterUpdate() {
+        guard let ids = Paths.defaults.stringArray(forKey: "ResumeAfterUpdate") else { return }
+        Paths.defaults.removeObject(forKey: "ResumeAfterUpdate")
+        for item in manager.items where ids.contains(item.id.uuidString) { manager.resume(item) }
     }
 
     // MARK: windows
@@ -499,6 +582,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let update = await UpdateChecker.check()
             await MainActor.run {
                 self?.manager.availableUpdate = update
+                if let u = update { self?.offerUpdate(u, manual: true) }
                 if update == nil {
                     let a = NSAlert()
                     a.messageText = "Castnet is up to date"

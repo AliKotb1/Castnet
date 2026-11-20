@@ -4,10 +4,14 @@ All notable changes to Castnet. The format follows [Keep a Changelog](https://ke
 
 ## [1.5.5] - 2026-11-20
 
+### Added
+- **Updates inside the app.** When a new version is published, Castnet shows what's new and offers **Download & Install**. It downloads the update itself, checks it against the published SHA-256 checksum and its signature, replaces the app and reopens. Your download list, settings and downloaded files stay exactly as they are, and downloads in progress continue after the update. **Later** and **Skip This Version** are there too, and *Check for Updates…* in the Castnet menu checks right away. (This works from 1.5.5 on; earlier versions show a banner with a download link.)
+
 ### Fixed
 - **Downloads from learning sites such as Canvas could end up as empty (0-byte) files** in 1.5.3–1.5.4. Their download links work only once, and Castnet paused the browser's download while it checked the link, which used the link up. Now the browser's download is never paused or touched: it's dropped only after Castnet has really received data from the link, and if Castnet can't get any, the browser finishes and Castnet takes the finished file.
 - An empty answer from a server ("200 OK" with no data) is an error, never a finished download, and an empty file is never taken from the browser.
 - A click on a PDF link uses the link only once (Castnet's download), so one-time PDF links work.
+- When Castnet is stopped with a "terminate" signal (scripts, some shutdowns), it saves its list and pauses downloads like a normal quit.
 
 ## [1.5.4] - 2026-11-20
 

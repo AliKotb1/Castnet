@@ -99,18 +99,26 @@ public enum ExtractorUpdater {
     }
 }
 
-/// Optional app updates: set `CastnetUpdateURL` in Info.plist to a JSON file such as
-/// {"version": "1.3.0", "url": "https://example.com/Castnet-1.3.0.dmg", "notes": "…"}.
-/// When a newer version is published, the window shows an "Update available" banner.
+/// App updates: `CastnetUpdateURL` in Info.plist points at a JSON file published with every release,
+/// {"version": "1.5.6", "url": "https://…/Castnet-1.5.6.dmg", "sha256": "…", "notes": "…"}.
+/// When a newer version is published, Castnet offers it in a window, downloads it itself, checks it,
+/// and replaces the app. Downloads, settings and files live outside the app and stay as they are.
 public struct AppUpdate: Codable, Equatable {
     public var version: String
     public var url: String
     public var notes: String?
+    public var sha256: String?
+
+    public init(version: String, url: String, notes: String? = nil, sha256: String? = nil) {
+        self.version = version; self.url = url; self.notes = notes; self.sha256 = sha256
+    }
 }
 
 public enum UpdateChecker {
     public static var feedURL: URL? {
-        (Bundle.main.object(forInfoDictionaryKey: "CastnetUpdateURL") as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        // Tests point a test copy of the app at a local feed.
+        if Paths.testHome != nil, let t = ProcessInfo.processInfo.environment["CASTNET_UPDATE_FEED"], let u = URL(string: t) { return u }
+        return (Bundle.main.object(forInfoDictionaryKey: "CastnetUpdateURL") as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) }
     }
 
     public static var appVersion: String {
@@ -126,5 +134,142 @@ public enum UpdateChecker {
               let u = try? JSONDecoder().decode(AppUpdate.self, from: data),
               ExtractorUpdater.isNewer(u.version, than: appVersion) else { return nil }
         return u
+    }
+}
+
+/// Downloads and installs an app update in place.
+public final class AppInstaller: NSObject, URLSessionDownloadDelegate {
+    public enum Failure: LocalizedError {
+        case message(String)
+        public var errorDescription: String? { if case let .message(m) = self { return m }; return nil }
+    }
+
+    private var progress: ((Double) -> Void)?
+    private var continuation: CheckedContinuation<URL, Error>?
+    private var destination: URL?
+
+    public override init() {}
+
+    /// Downloads the update's disk image and checks its SHA-256 against the published one.
+    public func download(_ u: AppUpdate, progress: @escaping (Double) -> Void) async throws -> URL {
+        guard let url = URL(string: u.url), url.scheme == "https" || Paths.testHome != nil else { throw Failure.message("The update’s address isn’t secure") }
+        let dir = Paths.caches.appendingPathComponent("Updates", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        destination = dir.appendingPathComponent("Castnet-\(u.version).dmg")
+        self.progress = progress
+        let session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        let file: URL = try await withCheckedThrowingContinuation { c in
+            continuation = c
+            session.downloadTask(with: url).resume()
+        }
+        if let want = u.sha256?.lowercased(), !want.isEmpty {
+            let got = try Self.sha256(of: file)
+            guard got == want else {
+                try? FileManager.default.removeItem(at: file)
+                throw Failure.message("The downloaded update doesn’t match the published checksum")
+            }
+        }
+        return file
+    }
+
+    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                           totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if totalBytesExpectedToWrite > 0 { progress?(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)) }
+    }
+
+    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let dest = destination else { return }
+        if let code = (downloadTask.response as? HTTPURLResponse)?.statusCode, code != 200 {
+            continuation?.resume(throwing: Failure.message("The update server answered \(code)")); continuation = nil; return
+        }
+        do {
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: location, to: dest)
+            continuation?.resume(returning: dest)
+        } catch {
+            continuation?.resume(throwing: error)
+        }
+        continuation = nil
+    }
+
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { continuation?.resume(throwing: error); continuation = nil }
+    }
+
+    static func sha256(of file: URL) throws -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/shasum")
+        p.arguments = ["-a", "256", file.path]
+        let out = Pipe()
+        p.standardOutput = out
+        try p.run()
+        p.waitUntilExit()
+        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return String(text.split(separator: " ").first ?? "").lowercased()
+    }
+
+    @discardableResult
+    static func run(_ tool: String, _ args: [String]) -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = args
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return -1 }
+        p.waitUntilExit()
+        return p.terminationStatus
+    }
+
+    /// Replaces `app` (the running Castnet) with the one in the disk image, after checking it's
+    /// Castnet, the expected version, and correctly signed. Nothing outside the app is touched.
+    public static func install(dmg: URL, expectedVersion: String, replacing app: URL) throws {
+        let fm = FileManager.default
+        let mount = Paths.caches.appendingPathComponent("Updates/mount-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: mount, withIntermediateDirectories: true)
+        guard run("/usr/bin/hdiutil", ["attach", dmg.path, "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path]) == 0 else {
+            throw Failure.message("The update’s disk image couldn’t be opened")
+        }
+        defer {
+            run("/usr/bin/hdiutil", ["detach", mount.path, "-force"])
+            try? fm.removeItem(at: mount)
+        }
+        guard let newApp = (try? fm.contentsOfDirectory(at: mount, includingPropertiesForKeys: nil))?.first(where: { $0.pathExtension == "app" }),
+              let info = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")) else {
+            throw Failure.message("The update doesn’t contain Castnet")
+        }
+        let myID = Bundle.main.bundleIdentifier ?? "app.castnet.mac"
+        guard info["CFBundleIdentifier"] as? String == myID else { throw Failure.message("The update is a different app") }
+        guard info["CFBundleShortVersionString"] as? String == expectedVersion else { throw Failure.message("The update has an unexpected version") }
+        guard run("/usr/bin/codesign", ["--verify", "--deep", "--strict", newApp.path]) == 0 else {
+            throw Failure.message("The update’s signature isn’t valid")
+        }
+        // Copy next to the current app (same disk), then swap the two in one step.
+        let staged = app.deletingLastPathComponent().appendingPathComponent(".Castnet-update-\(UUID().uuidString).app")
+        guard run("/usr/bin/ditto", [newApp.path, staged.path]) == 0 else {
+            try? fm.removeItem(at: staged)
+            throw Failure.message("Castnet can’t write to \(app.deletingLastPathComponent().path)")
+        }
+        do {
+            _ = try fm.replaceItemAt(app, withItemAt: staged)
+        } catch {
+            try? fm.removeItem(at: staged)
+            throw Failure.message("Castnet couldn’t replace itself: \(error.localizedDescription)")
+        }
+    }
+
+    /// Starts the (new) app once this process has quit.
+    public static func relaunch(_ app: URL) {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let start = Paths.testHome != nil
+            ? "\"\(app.path)/Contents/MacOS/Castnet\" >/dev/null 2>&1 &"     // test copy: keep its test settings
+            : "/usr/bin/open \"\(app.path)\""
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; \(start)"]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try? p.run()
     }
 }

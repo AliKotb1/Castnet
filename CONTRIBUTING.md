@@ -32,6 +32,7 @@ The tests generate their own media with FFmpeg, so for development you need a fu
 node test/e2e.mjs /tmp/castnet-e2e      # real Chrome + the extension (needs Chrome and playwright-core)
 node test/e2e-renew.mjs /tmp/castnet-e2e  # a link that expires mid-download is renewed
 node test/e2e-takeover.mjs /tmp/castnet-e2e  # every browser download goes to Castnet, safely
+./test/app-update-test.sh /tmp/castnet-e2e  # in-app update: installs itself, keeps the list and files
 ./test/dmg-test.sh dist/Castnet-<version>.dmg   # the DMG works with Homebrew hidden
 ```
 

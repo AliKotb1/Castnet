@@ -99,8 +99,8 @@ struct ContentView: View {
             MainToolbar(selected: selected, addURL: addURL, list: list)
             Divider()
             if let u = manager.availableUpdate {
-                Banner(icon: "arrow.down.app", text: "Castnet \(u.version) is available.", button: "Download") {
-                    if let url = URL(string: u.url) { NSWorkspace.shared.open(url) }
+                Banner(icon: "arrow.down.app", text: "Castnet \(u.version) is available.", button: "Install…") {
+                    AppActions.showUpdate(u)
                 }
             }
             ForEach(outdatedAddons, id: \.name) { b in

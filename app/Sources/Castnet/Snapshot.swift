@@ -39,6 +39,11 @@ enum Snapshot {
         } else if let w = args.firstIndex(of: "--walkthrough"), w + 1 < args.count, let step = Int(args[w + 1]) {
             let browser = BrowserSetup.known.first { $0.name == (args.contains("--edge") ? "Microsoft Edge" : "Google Chrome") }!
             extra = (AnyView(ChromiumWalkthrough(browser: browser, step: step).padding(24).frame(width: 640).environmentObject(manager)), NSSize(width: 640, height: 330))
+        } else if args.contains("--update") {
+            let m = UpdateModel()
+            m.update = AppUpdate(version: "1.6.0", url: "https://example.com/Castnet-1.6.0.dmg",
+                                 notes: "Fixed:\n• Example fix one.\n• Example fix two.\n\nAdded:\n• Example feature.", sha256: nil)
+            extra = (AnyView(UpdateView(model: m, install: {}, later: {}, skip: {}, openInBrowser: {})), NSSize(width: 520, height: 420))
         } else if args.contains("--complete"), let done = manager.items.first(where: { $0.state == .completed }) {
             extra = (AnyView(CompleteView(item: done, close: {}).environmentObject(manager)), NSSize(width: 480, height: 200))
         } else {

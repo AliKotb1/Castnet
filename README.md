@@ -43,7 +43,7 @@ The name: a cast net is the round fishing net that's thrown to catch everything 
 
 ## Install (for users)
 
-1. Download **Castnet-1.5.1.dmg** from [Releases](https://github.com/AliKotb1/Castnet/releases/latest), open it and drag **Castnet** into **Applications**.
+1. Download **Castnet-1.5.5.dmg** from [Releases](https://github.com/AliKotb1/Castnet/releases/latest), open it and drag **Castnet** into **Applications**.
 2. Open Castnet. It checks which browsers are actually installed, connects itself to each of them, and opens **Set Up Castnet**, which shows only your browsers. Pick one and follow its steps:
 
 | Browser | Steps in the setup window |
@@ -65,7 +65,7 @@ Nothing else is needed: no Terminal, no Homebrew. Everything Castnet uses is ins
 
 **Gatekeeper:** without an Apple Developer ID, the app is ad-hoc signed. The first time, macOS says it can't verify the developer. Click **Done**, then go to **System Settings → Privacy & Security → Open Anyway**. Signing and notarizing with a Developer ID (see below) removes this step, and also lets Safari load the extension without *Allow unsigned extensions*.
 
-**Sending updates:** raise the version (see [CHANGELOG.md](CHANGELOG.md)), then run `scripts/release.sh`. It builds the DMG, attaches it to a new GitHub release with checksums, and updates `castnet-update.json`, which every installed copy checks once a day to show an **Update available** banner.
+**Updates:** Castnet checks for a new version once a day (and from *Check for Updates…* in its menu). When one is published, it shows what's new and offers **Download & Install**: it downloads the update itself, checks the published SHA-256 checksum and the signature, replaces the app and reopens, keeping your download list, settings and files. To publish an update, raise the version and add a [CHANGELOG.md](CHANGELOG.md) entry, then run `scripts/release.sh`; it builds the DMG, writes the update file with the checksum and notes, and creates the GitHub release.
 
 ## Publishing to the stores
 
@@ -187,7 +187,8 @@ node test/e2e-takeover.mjs /tmp/x      # real Chrome + a test copy of Castnet: e
 node test/e2e-renew.mjs /tmp/x         # real Chrome + a headless test copy of Castnet: the video link
                                        # expires mid-download and must be renewed and finished byte-identical
 python3 test/zen-firefox.py /tmp/x [browser-binary]   # Zen/Firefox through Marionette with a throwaway profile
-./test/dmg-test.sh dist/Castnet-1.5.1.dmg   # installs the DMG into a sandbox with no Homebrew and downloads from it
+./test/app-update-test.sh /tmp/x       # a test copy updates itself in place and keeps its downloads
+./test/dmg-test.sh dist/Castnet-1.5.5.dmg   # installs the DMG into a sandbox with no Homebrew and downloads from it
 ```
 
 The e2e tests use a separate test copy of the app (`CASTNET_HOME`, `CASTNET_HEADLESS`): own folder, own settings, own socket, never your real download list.
