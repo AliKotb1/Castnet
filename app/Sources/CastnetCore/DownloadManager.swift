@@ -398,6 +398,8 @@ public final class DownloadManager: ObservableObject {
         var isDir: ObjCBool = false
         guard path.hasPrefix("/"), fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else { return nil }
         if let known = items.first(where: { $0.outputPaths.contains(path) }) { return known }
+        // An empty file is a failed download, never something to keep.
+        guard ((try? fm.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0) > 0 else { return nil }
         var file = URL(fileURLWithPath: path).standardizedFileURL
         let category = FileCategory.of(filename: file.lastPathComponent, kind: .file)
         let dir = settings.folder(for: category).standardizedFileURL
@@ -1091,6 +1093,28 @@ public final class DownloadManager: ObservableObject {
                 if !ok { return ["ok": false, "keepInBrowser": true, "error": reason ?? "Castnet can’t fetch this link"] }
             }
             let (item, existing) = submit(req, confirm: message["confirm"] as? Bool ?? true)
+            // waitForData: the browser keeps its own copy until Castnet has really received data, so a
+            // link that only works once (or gives Castnet nothing) is never lost.
+            if message["waitForData"] as? Bool == true, !existing {
+                let deadline = Date().addingTimeInterval(90)
+                while Date() < deadline {
+                    if !items.contains(where: { $0 === item }) {
+                        return ["ok": true, "canceledByUser": true]   // cancelled in the Download File Info dialog
+                    }
+                    if item.received > 0 { break }                     // data is flowing
+                    if item.state == .scheduled, !item.awaitingConfirmation { break }   // the person chose Download Later
+                    if item.state == .failed || item.state == .canceled || (item.state == .completed && item.received == 0) {
+                        let why = item.error ?? "Castnet got no data from this link"
+                        remove(item)
+                        return ["ok": false, "keepInBrowser": true, "error": why]
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                if item.state == .running, item.received == 0 {
+                    remove(item)                                       // stalled: the browser's copy is the safer one
+                    return ["ok": false, "keepInBrowser": true, "error": "Castnet got no data from this link in time"]
+                }
+            }
             return ["ok": true, "id": item.id.uuidString, "filename": item.filename, "existing": existing]
         case "adopt":
             guard let path = message["path"] as? String,

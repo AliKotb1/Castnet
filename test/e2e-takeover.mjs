@@ -69,7 +69,7 @@ const browserList = () => ext.evaluate(() => new Promise((r) => chrome.downloads
 const page = await ctx.newPage();
 await page.goto('http://127.0.0.1:8765/takeover.html');
 await sleep(800);
-for (const id of ['unknown', 'tiny', 'once', 'blob', 'pdf', 'canvas']) {
+for (const id of ['unknown', 'tiny', 'once', 'blob', 'pdf', 'canvas', 'oneuse', 'twouse']) {
   await page.click(`#${id}`);
   await sleep(1500);
 }
@@ -79,7 +79,7 @@ const stayed = page.url().endsWith('/takeover.html');
 let items = [];
 for (let i = 0; i < 60; i++) {
   items = appItems();
-  if (items.filter((x) => x.state === 'completed').length >= 6) break;
+  if (items.filter((x) => x.state === 'completed').length >= 8) break;
   await sleep(500);
 }
 const byName = (n) => items.find((x) => x.filename === n);
@@ -101,6 +101,17 @@ check(done('made-here.txt') && fs.readFileSync(made.outputs[0], 'utf8') === 'mad
 const castnetFolder = fs.realpathSync(path.join(home, 'Downloads'));
 check([once, made].every((x) => x?.outputs?.[0] && path.dirname(fs.realpathSync(x.outputs[0])) === castnetFolder), "…moved into Castnet's folder");
 
+// Links that work once or twice (like Canvas): the browser's download is never interrupted, so the
+// full file always ends up in Castnet, and nothing in Castnet is ever an empty file.
+const oneuse = byName('Test-2-Review.pdf'), twouse = byName('quiz.pdf');
+check(done('Test-2-Review.pdf') && sha(oneuse.outputs[0]) === sha(path.join(media, 'vonly.webm')),
+  `a link that works only once: the full file ended up in Castnet (${oneuse?.state ?? 'missing'}, ${oneuse?.total ?? 0} bytes)`);
+check(done('quiz.pdf') && sha(twouse.outputs[0]) === sha(path.join(media, 'aonly.mp4')),
+  `a link whose second fetch gives nothing: the full file ended up in Castnet (${twouse?.state ?? 'missing'}, ${twouse?.total ?? 0} bytes)`);
+const empty = items.filter((x) => x.state === 'completed' && !(x.outputs?.[0] && fs.statSync(x.outputs[0]).size > 0));
+check(empty.length === 0, `no download in Castnet is an empty file (${empty.map((x) => x.filename).join(', ') || 'none'})`);
+check(items.filter((x) => /Test-2-Review|quiz/.test(x.filename)).length === 2, 'each of them is listed once');
+
 // The app knows which extension version Chrome runs (it shows a banner when that's out of date).
 const extVersions = appCall({ type: 'ping' }).extensions || {};
 const ownVersion = JSON.parse(fs.readFileSync(path.join(root, 'dist/extensions/chrome/manifest.json'), 'utf8')).version;
@@ -109,7 +120,7 @@ check(extVersions['com.google.Chrome'] === ownVersion, `the app knows Chrome run
 // The browser's side: nothing left behind, nothing saved twice.
 await sleep(1500);
 const list = await browserList();
-const names = ['notes.qqq', 'tiny.json', 'once.webm', 'made-here.txt', 'doc.pdf', 'week3-notes.pdf'];
+const names = ['notes.qqq', 'tiny.json', 'once.webm', 'made-here.txt', 'doc.pdf', 'week3-notes.pdf', 'Test-2-Review.pdf', 'quiz.pdf'];
 check(!list.some((d) => names.some((n) => (d.filename || '').endsWith(n))), "the browser's download list has none of them");
 check(fs.readdirSync(browserDownloads).filter((f) => !f.startsWith('.')).length === 0, "the browser's download folder is empty (no second copies)");
 

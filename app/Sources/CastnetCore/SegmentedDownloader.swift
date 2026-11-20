@@ -459,6 +459,8 @@ public final class SegmentedDownloader: NSObject, DownloadEngine, URLSessionData
         guard conn.generation == generation, !stopped, !finished else { return }
         var seg = state.segments[conn.index]
         if seg.end == .max, error == nil, conn.httpError == nil, conn.validated {
+            // A server that answers with no data at all (often a used-up one-time link) didn't send the file.
+            if seg.pos == 0, state.segments.count == 1 { return fail(CastnetError.process("The server sent no data")) }
             seg.end = seg.pos - 1
             state.segments[conn.index] = seg
             state.total = seg.pos
@@ -496,12 +498,16 @@ public enum LinkProbe {
         let req = RequestContext(request: r).makeRequest(url, range: "bytes=0-0", extra: ["Accept-Encoding": "identity"])
         do {
             let (bytes, resp) = try await session.bytes(for: req)
-            bytes.task.cancel()
+            defer { bytes.task.cancel() }
             guard let http = resp as? HTTPURLResponse else { return (false, "The server didn’t answer") }
             guard (200..<300).contains(http.statusCode) else { return (false, "The server answered \(http.statusCode) to Castnet") }
+            // Some one-time links answer "200 OK" with nothing once used: there must be real data.
+            var it = bytes.makeAsyncIterator()
+            guard try await it.next() != nil else { return (false, "The link gives Castnet an empty answer") }
             let total: Int64? = http.statusCode == 206
                 ? http.value(forHTTPHeaderField: "Content-Range")?.split(separator: "/").last.flatMap { Int64($0) }
                 : (http.expectedContentLength > 0 ? http.expectedContentLength : nil)
+            if total == 0 { return (false, "The link gives Castnet an empty file") }
             if let want = r.size, want > 0, let got = total, got != want {
                 return (false, "The link gives Castnet a different file (\(got) bytes; the browser has \(want))")
             }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Castnet: Video & Download Catcher",
   "short_name": "Castnet",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Finds every video on a page, lets you pick the quality, and downloads it with Castnet for Mac. Separate video and audio streams are merged automatically.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8hLtoh1MdGudO7gLg2mS4xyEx2uGhCEpDY26Zj8q/guJRkSvRd374ASnlXlK4h8gP3UpajUkrO5eUvw3I+u95oZaO5NnY6x6lC6FVzZc7of/GC4aEK5xsvs0YcZQdR5NSOgFRsmR3HAHU/6P+A9kBX/tmq1xTeVjZuPHpJ6EtcsSe8UMck4gzT4hphcGG7ElUchqijYJUE8a+/wQzSYnE5+AkN0oEhQEH23xirhXfeQ9JIL0taOS84hoQ/mmtUwQ0aUnvFwE7Dp2ZNu27PywOCSaOgfHXpN7ehgzEKHRN559t3P3+EWwFkpSkOUgykNgT2+n8MJWEu/clgMldSv/7QIDAQAB",
   "minimum_chrome_version": "116",

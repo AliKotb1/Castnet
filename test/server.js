@@ -100,6 +100,7 @@ function livePlaylist(res) {
 }
 
 const usedOnce = new Set();
+const usedCount = new Map();
 http.createServer((req, res) => {
   stats.requests++;
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -139,6 +140,8 @@ http.createServer((req, res) => {
 <a id="blob" download="made-here.txt">made-here.txt</a>
 <a id="pdf" href="/doc.pdf?k=${Date.now()}">Lecture slides (PDF)</a>
 <a id="canvas" href="/r/attach/aonly.mp4?as=week3-notes.pdf&k=${Date.now()}">Download week 3 notes</a>
+<a id="oneuse" href="/r/limited/attach/vonly.webm?n=1&as=Test-2-Review.pdf&k=${Date.now()}">Test 2 review (link works once)</a>
+<a id="twouse" href="/r/limited/attach/aonly.mp4?n=2&as=quiz.pdf&k=${Date.now()}">Quiz (link works twice)</a>
 <script>document.getElementById('blob').href = URL.createObjectURL(new Blob(['made by the page'], { type: 'text/plain' }));</script>
 </body></html>`);
   }
@@ -153,6 +156,18 @@ http.createServer((req, res) => {
   if (p.startsWith('/r/')) {
     res.writeHead(302, { Location: p.slice(2) + url.search });
     return res.end();
+  }
+  // /limited/<path>?n=K: the first K requests get the file; after that "200 OK" with nothing,
+  // like a learning site's download token once it's used up.
+  if (p.startsWith('/limited/')) {
+    const key = p + url.search;
+    const used = (usedCount.get(key) || 0) + 1;
+    usedCount.set(key, used);
+    if (used > Number(url.searchParams.get('n') || 1)) {
+      res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': 0 });
+      return res.end();
+    }
+    p = p.slice('/limited'.length);
   }
   // One-time links (like some signed download URLs): the first request works, later ones get 410.
   if (p.startsWith('/once/')) {

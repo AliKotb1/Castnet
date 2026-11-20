@@ -209,6 +209,25 @@ check(bool(taken) and taken['state'] == 'completed', f"a download of an unlisted
 time.sleep(2)
 check(not any(f.startswith('notes.') for f in os.listdir(zen_downloads)), 'the browser kept no second copy')
 
+# --- links that work once or twice, like Canvas: the full file must end up in Castnet, never an empty one
+for prefix, n, src in [('Test-2-Review', 1, 'vonly.webm'), ('quiz', 2, 'aonly.mp4')]:
+    js(f'window.location.href = "http://127.0.0.1:8765/r/limited/attach/{src}?n={n}&as={prefix}.pdf&k={time.time()}"; return true')
+    got = None
+    for _ in range(60):
+        time.sleep(0.5)
+        got = next((i for i in (host({'type': 'list'}) or {}).get('items', []) if i['filename'].startswith(prefix + '.')), None)
+        if got and got['state'] == 'completed': break
+    full = os.path.getsize(os.path.join(scratch, 'media', src))
+    size = os.path.getsize(got['outputs'][0]) if got and got.get('outputs') else 0
+    check(bool(got) and got['state'] == 'completed' and size == full,
+          f"a link that works {n}x: the full file ended up in Castnet ({got and got['state']}, {size} of {full} bytes)")
+    m.cmd('WebDriver:Navigate', {'url': 'http://127.0.0.1:8765/takeover.html'})
+    time.sleep(1)
+items_now = (host({'type': 'list'}) or {}).get('items', [])
+empty = [i['filename'] for i in items_now if i['state'] == 'completed' and not (i.get('outputs') and os.path.getsize(i['outputs'][0]) > 0)]
+check(not empty, f"no download in Castnet is an empty file ({', '.join(empty) or 'none'})")
+check(not os.listdir(zen_downloads), 'nothing was left in the browser\'s download folder')
+
 # --- a click on a PDF link goes to Castnet instead of opening in the browser's viewer
 m.cmd('WebDriver:Navigate', {'url': 'http://127.0.0.1:8765/takeover.html'})
 time.sleep(1.5)

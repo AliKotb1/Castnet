@@ -2,6 +2,13 @@
 
 All notable changes to Castnet. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.5] - 2026-11-20
+
+### Fixed
+- **Downloads from learning sites such as Canvas could end up as empty (0-byte) files** in 1.5.3–1.5.4. Their download links work only once, and Castnet paused the browser's download while it checked the link, which used the link up. Now the browser's download is never paused or touched: it's dropped only after Castnet has really received data from the link, and if Castnet can't get any, the browser finishes and Castnet takes the finished file.
+- An empty answer from a server ("200 OK" with no data) is an error, never a finished download, and an empty file is never taken from the browser.
+- A click on a PDF link uses the link only once (Castnet's download), so one-time PDF links work.
+
 ## [1.5.4] - 2026-11-20
 
 ### Added
@@ -55,6 +62,7 @@ First public release. Versions up to 1.4.0 were private builds named *Grabber*; 
 - Finished files get macOS's quarantine flag like browser downloads, so Gatekeeper checks downloaded apps and disk images.
 - Fully self-contained: yt-dlp, FFmpeg and QuickJS are inside the app; nothing to install with Terminal or Homebrew. Universal (Apple Silicon and Intel), macOS 13 or later.
 
+[1.5.5]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.5
 [1.5.4]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.4
 [1.5.3]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.3
 [1.5.2]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.2

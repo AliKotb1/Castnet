@@ -947,7 +947,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           cookies: await cookiesFor([url, pageUrl]), mime: /\.pdf$/i.test(last) ? 'application/pdf' : null,
         };
         try {
-          const res = await sendNative({ type: 'download', request, verify: true }, 45000);
+          // No separate check here: Castnet's own download is the only fetch, so a link that works
+          // once isn't used up. If Castnet gets no data from it, the page opens it after all.
+          const res = await sendNative({ type: 'download', request, waitForData: true }, 120000);
           return { ok: !!res?.ok };
         } catch {
           return { ok: false };
@@ -1089,9 +1091,9 @@ chrome.downloads?.onCreated.addListener(async (dl) => {
     return adoptWhenDone(dl);   // only the browser can fetch it, or it already did
   }
 
-  // Pause at once so no bytes are wasted while Castnet checks the link. The bridge starts
-  // Castnet if it isn't running, so a closed app no longer lets downloads slip past.
-  chrome.downloads.pause(dl.id).catch(() => {});
+  // The browser's download is NOT paused: pausing drops its connection, and links that work only
+  // once (learning sites, signed storage) can't be resumed. It keeps going until Castnet has really
+  // received data. The bridge starts Castnet if it isn't running.
   const filename = (dl.filename || '').split(/[\\/]/).pop() || named || null;
   const request = {
     url, kind: KIND.FILE, filename, pageUrl: dl.referrer || null, referer: dl.referrer || null,
@@ -1100,12 +1102,11 @@ chrome.downloads?.onCreated.addListener(async (dl) => {
     mime: dl.mime || null,
   };
   try {
-    // verify: Castnet first fetches the start of the file the way it would download it, and only
-    // accepts if that works and matches what the browser got. Then the browser's copy is dropped.
-    const res = await sendNative({ type: 'download', request, verify: true }, 45000);
+    // verify: Castnet first checks it gets real data from the link, matching what the browser gets.
+    // waitForData: the answer comes only once Castnet's own download has received data.
+    const res = await sendNative({ type: 'download', request, verify: true, waitForData: true }, 120000);
     if (res?.ok) {
-      // A small file may have finished in the browser while Castnet checked the link: then delete
-      // the browser's copy too, so the file isn't saved twice.
+      // Castnet has it: drop the browser's copy (finished or not), so the file isn't saved twice.
       const [now] = await chrome.downloads.search({ id: dl.id }).catch(() => []);
       if (now?.state === 'complete') await chrome.downloads.removeFile(dl.id).catch(() => {});
       else await chrome.downloads.cancel(dl.id).catch(() => {});
@@ -1113,8 +1114,7 @@ chrome.downloads?.onCreated.addListener(async (dl) => {
       return;
     }
   } catch { /* fall through */ }
-  await adoptWhenDone(dl);   // noted before resuming, so the moment it finishes can't be missed
-  chrome.downloads.resume(dl.id).catch(() => {});
+  await adoptWhenDone(dl);   // the browser's download was never touched; Castnet takes the file when it's done
 });
 
 /** Castnet takes the file once the browser has finished it (see onCreated). */
@@ -1132,7 +1132,10 @@ async function adoptNow(id) {
   adopting.add(id);
   await session.remove(key);
   const [d] = await chrome.downloads.search({ id }).catch(() => []);
-  if (!d || d.state !== 'complete' || !d.filename || d.exists === false) return;
+  if (!d || d.state !== 'complete' || !d.filename || d.exists === false) { adopting.delete(id); return; }
+  // Never take an empty or incomplete file (a failed download that the browser marked finished).
+  const size = d.fileSize > 0 ? d.fileSize : d.bytesReceived;
+  if (!(size > 0) || (d.totalBytes > 0 && d.bytesReceived > 0 && d.bytesReceived < d.totalBytes)) { adopting.delete(id); return; }
   const url = d.finalUrl || d.url || '';
   try {
     const res = await sendNative({ type: 'adopt', path: d.filename, url: /^https?:/i.test(url) ? url : '', pageUrl: d.referrer || null }, 30000);
