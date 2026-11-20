@@ -1,0 +1,7 @@
+(version 1)
+; Simulates a Mac without Homebrew/MacPorts/user tools: Castnet must use only what's inside the app.
+(allow default)
+(deny file-read* file-write* process-exec
+  (subpath "/opt/homebrew")
+  (subpath "/usr/local")
+  (subpath "/opt/local"))

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Swift toolchain
+        run: swift --version
+
+      - name: Build the Swift package (app, bridge, CLI, self-test)
+        run: swift build --package-path app
+
+      - name: Build the browser extensions and store packages
+        run: node scripts/build-extensions.mjs
+
+      - name: Install FFmpeg (only for generating test media)
+        run: brew install ffmpeg
+
+      - name: Generate test media
+        run: ./test/gen-media.sh "$RUNNER_TEMP/media"
+
+      - name: Extension unit tests
+        run: node test/ext-unit.mjs "$RUNNER_TEMP/media"
+
+      - name: Download-manager self-test
+        run: |
+          node test/server.js "$RUNNER_TEMP/media" 8765 > "$RUNNER_TEMP/server.log" 2>&1 &
+          sleep 2
+          mkdir -p "$RUNNER_TEMP/home"
+          CASTNET_HOME="$RUNNER_TEMP/home" "$(swift build --package-path app --show-bin-path)/castnet-selftest" http://127.0.0.1:8765

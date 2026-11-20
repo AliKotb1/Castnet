@@ -1,0 +1,46 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Security problems go through private reporting instead (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Page or link
+      description: The page where it happened, if it's public.
+  - type: textarea
+    id: message
+    attributes:
+      label: Message shown
+      description: For a failed download, the text in the Description column or the status window.
+  - type: input
+    id: version
+    attributes:
+      label: Castnet version
+      description: Shown at the bottom right of the Castnet window.
+      placeholder: "1.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options: [Safari, Chrome, Edge, Brave, Arc, Vivaldi, Opera, Firefox, Zen, Other / not browser-related]
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: "macOS 26.1, Apple Silicon"
+    validations:
+      required: true

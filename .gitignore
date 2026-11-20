@@ -1,0 +1,8 @@
+app/.build/
+dist/
+keys/
+*.castnet-part
+.DS_Store
+vendor/
+private/
+node_modules/

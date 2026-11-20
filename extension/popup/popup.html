@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Castnet</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon32.png" width="20" height="20" alt="">
+    <h1>Castnet</h1>
+    <button id="app" class="app" type="button" title="Castnet for Mac">
+      <span class="dot"></span><span id="appText">Checking…</span>
+    </button>
+  </header>
+
+  <div class="site">
+    <span id="host" class="host"></span>
+    <label class="switch" title="Turn Castnet on or off for this site">
+      <input id="siteToggle" type="checkbox" checked>
+      <span class="track"><span class="thumb"></span></span>
+      <span id="siteLabel">On for this site</span>
+    </label>
+  </div>
+
+  <main>
+    <div id="title" class="title"></div>
+    <section id="list" role="list"></section>
+    <div id="loading" class="loading" hidden><span class="spin"></span><span>Finding available qualities…</span></div>
+    <div id="empty" class="empty" hidden>
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>
+      <p><strong>No video found on this page yet.</strong></p>
+      <p>Start playing the video, then open Castnet again.</p>
+    </div>
+    <div id="off" class="empty" hidden>
+      <p><strong>Castnet is off for this site.</strong></p>
+      <p>Turn it back on with the switch above.</p>
+    </div>
+    <div id="toast" class="toast" hidden></div>
+  </main>
+
+  <footer>
+    <div class="actions">
+      <button id="allLinks" type="button" class="secondary">Download all links…</button>
+      <button id="clear" type="button" class="ghost">Clear</button>
+    </div>
+    <details>
+      <summary>Settings</summary>
+      <label class="toggle"><input id="catchDownloads" type="checkbox"> Take over browser downloads <span class="hint">(hold ⌥ Option when clicking to skip)</span></label>
+      <label class="toggle"><input id="showOverlay" type="checkbox"> Show “Download this video” on videos</label>
+      <label class="field">File types to take over
+        <textarea id="catchExtensions" rows="3" spellcheck="false"></textarea>
+      </label>
+      <label class="field inline">Ignore media smaller than
+        <input id="minMediaSizeKB" type="number" min="0" step="50"> KB
+      </label>
+    </details>
+  </footer>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+name: Feature request
+description: An idea to make Castnet better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The task you're trying to get done, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could Castnet help?
+  - type: input
+    id: site
+    attributes:
+      label: Site (for new site support)
+      description: A public example page, if the request is about a specific site.

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download links · Castnet</title>
+  <link rel="stylesheet" href="picker.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon32.png" width="24" height="24" alt="">
+    <div class="h">
+      <h1 id="heading">Download links</h1>
+      <div id="source" class="src"></div>
+    </div>
+  </header>
+
+  <div class="tools">
+    <div id="chips" class="chips" role="tablist" aria-label="File types"></div>
+    <input id="search" type="search" placeholder="Filter by name or address" aria-label="Filter links">
+  </div>
+
+  <div class="table" role="grid" aria-label="Links">
+    <div class="thead" role="row">
+      <label class="c" role="columnheader"><input id="all" type="checkbox" aria-label="Select all shown"></label>
+      <span role="columnheader">Name</span>
+      <span role="columnheader">Type</span>
+      <span role="columnheader">Address</span>
+    </div>
+    <div id="rows" class="tbody"></div>
+    <div id="none" class="none" hidden>No links match this filter.</div>
+  </div>
+
+  <footer>
+    <span id="count" class="count"></span>
+    <span id="msg" class="msg"></span>
+    <button id="cancel" type="button" class="ghost">Cancel</button>
+    <button id="go" type="button" class="primary">Download</button>
+  </footer>
+  <script src="picker.js" type="module"></script>
+</body>
+</html>
