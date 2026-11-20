@@ -2,6 +2,12 @@
 
 All notable changes to Castnet. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-11-20
+
+### Added
+- A step-by-step walkthrough for adding the extension to Chrome, Edge, Brave, Arc, Vivaldi and Opera: one step at a time, with a drawing of the browser's Extensions page that highlights what to click. It moves on by itself as soon as the browser has loaded Castnet.
+- The setup window shows which of your browsers already have Castnet (a green check on each).
+
 ## [1.5.0] - 2026-11-20
 
 First public release. Versions up to 1.4.0 were private builds named *Grabber*; on first launch, Castnet moves their download list, settings and unfinished downloads over by itself.
@@ -24,4 +30,5 @@ First public release. Versions up to 1.4.0 were private builds named *Grabber*; 
 - Finished files get macOS's quarantine flag like browser downloads, so Gatekeeper checks downloaded apps and disk images.
 - Fully self-contained: yt-dlp, FFmpeg and QuickJS are inside the app; nothing to install with Terminal or Homebrew. Universal (Apple Silicon and Intel), macOS 13 or later.
 
+[1.5.1]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.1
 [1.5.0]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.0

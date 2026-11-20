@@ -227,7 +227,11 @@ struct SetupView: View {
     @StateObject private var model = SetupModel()
     let onDone: () -> Void
 
-    private var connected: Bool { manager.lastExtensionContact != nil || manager.extensionEverConnected }
+    /// Installed browsers whose Castnet extension has reached the app.
+    private var connectedNames: [String] {
+        BrowserSetup.installed.filter { b in b.bundleIDs.contains { manager.connectedBrowsers.contains($0) } }.map(\.name)
+    }
+    private var connected: Bool { !connectedNames.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -247,6 +251,12 @@ struct SetupView: View {
                         Button { model.browser = b; model.opened = false } label: {
                             VStack(spacing: 4) {
                                 Image(nsImage: BrowserSetup.icon(b)).resizable().frame(width: 34, height: 34)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if b.bundleIDs.contains(where: { manager.connectedBrowsers.contains($0) }) {
+                                            Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
+                                                .foregroundStyle(.white, .green).offset(x: 4, y: 3)
+                                        }
+                                    }
                                 Text(b.name).font(.caption).lineLimit(1)
                             }
                             .frame(width: 92, height: 66)
@@ -260,7 +270,7 @@ struct SetupView: View {
 
             if let b = model.browser {
                 switch b.family {
-                case .chromium: chromiumSteps(b)
+                case .chromium: ChromiumWalkthrough(browser: b).id(b.name)
                 case .firefox: firefoxSteps(b)
                 case .safari: safariSteps(b)
                 }
@@ -272,7 +282,8 @@ struct SetupView: View {
             Divider()
             HStack {
                 if connected {
-                    Label("Castnet is connected to your browser. You’re all set!", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Label("Castnet works in \(ListFormatter.localizedString(byJoining: connectedNames)). Add it to another browser any time.", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green).fixedSize(horizontal: false, vertical: true)
                 } else {
                     ProgressView().controlSize(.small)
                     Text("Waiting for the browser extension…").foregroundStyle(.secondary)
@@ -284,31 +295,6 @@ struct SetupView: View {
         .padding(24)
         .frame(width: 640)
         .onAppear { BrowserSetup.refreshSafariState { model.tick += 1 } }
-    }
-
-    @ViewBuilder private func chromiumSteps(_ b: BrowserSetup.Browser) -> some View {
-        step(1, "Open the Extensions page") {
-            HStack {
-                Button("Open \(b.name) Extensions") { BrowserSetup.open("\(b.pageScheme)://extensions", in: b); model.opened = true }
-                    .controlSize(.large)
-                if model.opened {
-                    Text("Didn’t open? Paste \(b.pageScheme)://extensions in the address bar (it’s on your clipboard).")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        step(2, "Turn on “Developer mode”") {
-            Text("It’s the switch in the top-right corner of the Extensions page.").foregroundStyle(.secondary)
-        }
-        step(3, "Drag this folder onto the Extensions page") {
-            HStack(spacing: 14) {
-                FolderTile(url: BrowserSetup.extensionFolder, title: "Castnet Extension")
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Or click **Load unpacked** on that page and choose this folder.").foregroundStyle(.secondary)
-                    Button("Show Folder in Finder") { NSWorkspace.shared.activateFileViewerSelecting([BrowserSetup.extensionFolder]) }
-                }
-            }
-        }
     }
 
     @ViewBuilder private func firefoxSteps(_ b: BrowserSetup.Browser) -> some View {

@@ -34,12 +34,13 @@ const settings = JSON.stringify({ downloadDirectory: path.join(home, 'Downloads'
 execFileSync('defaults', ['write', 'app.castnet.mac.test', 'CastnetSettings', '-data', Buffer.from(settings).toString('hex')]);
 const env = { ...process.env, CASTNET_HOME: home, CASTNET_HEADLESS: '1' };
 const appProc = spawn(path.join(app, 'Castnet'), [], { env, stdio: 'ignore' });
-function appList() {
-  const msg = Buffer.from(JSON.stringify({ type: 'list' }));
+function appCall(message) {
+  const msg = Buffer.from(JSON.stringify(message));
   const len = Buffer.alloc(4); len.writeUInt32LE(msg.length);
   const out = execFileSync(path.join(app, 'castnet-host'), { input: Buffer.concat([len, msg]), env });
-  return JSON.parse(out.subarray(4, 4 + out.readUInt32LE(0)).toString()).items;
+  return JSON.parse(out.subarray(4, 4 + out.readUInt32LE(0)).toString());
 }
+const appList = () => appCall({ type: 'list' }).items;
 let up = false;
 for (let i = 0; i < 60 && !up; i++) { await sleep(250); try { up = Array.isArray(appList()); } catch { /* not yet */ } }
 check(up, 'test instance of Castnet is running');
@@ -99,6 +100,9 @@ if (item?.outputs?.[0]) {
   const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
   check(sha(item.outputs[0]) === sha(path.join(scratch, 'media/progressive.mp4')), 'file is byte-identical (nothing re-downloaded wrongly)');
 }
+// The app knows which browser the extension runs in (the setup walkthrough waits for this).
+const browsers = appCall({ type: 'ping' }).browsers || [];
+check(browsers.includes('com.google.Chrome'), `the app recognized the extension's browser as Google Chrome (${browsers.join(', ') || 'none'})`);
 const tabsLeft = await ext.evaluate(async () => (await chrome.tabs.query({})).length);
 console.log(`     tabs open at the end: ${tabsLeft}`);
 

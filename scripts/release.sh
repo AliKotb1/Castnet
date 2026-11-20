@@ -2,6 +2,7 @@
 # Builds Castnet and publishes a GitHub release for the version in CastnetCore/Util.swift.
 #   scripts/release.sh            build, check, and publish tag v<version>
 #   DRY_RUN=1 scripts/release.sh  build everything into dist/release, publish nothing
+#   SKIP_BUILD=1 scripts/release.sh  publish the DMG already built (e.g. after testing a DRY_RUN)
 # Needs: vendor/ (scripts/fetch-vendor.sh) and the GitHub CLI logged in to the repo owner.
 # Optional, passed through to the build: SIGN_IDENTITY, NOTARY_PROFILE, CHROME_EXTENSION_IDS, SIGNED_XPI.
 set -euo pipefail
@@ -18,7 +19,13 @@ grep -q "^## \[$VERSION\]" "$ROOT/CHANGELOG.md" || { echo "CHANGELOG.md has no s
 
 # Installed copies check this file (from the newest release) once a day: "Update available".
 export CASTNET_UPDATE_URL="https://github.com/$REPO/releases/latest/download/castnet-update.json"
-"$ROOT/scripts/make-dmg.sh"
+if [ -z "${SKIP_BUILD:-}" ]; then
+  "$ROOT/scripts/make-dmg.sh"
+else
+  FEED_IN_APP="$(/usr/libexec/PlistBuddy -c 'Print :CastnetUpdateURL' "$ROOT/dist/Castnet.app/Contents/Info.plist" 2>/dev/null || true)"
+  [ "$FEED_IN_APP" = "$CASTNET_UPDATE_URL" ] || { echo "dist/Castnet.app wasn't built for release (no update feed): run without SKIP_BUILD" >&2; exit 1; }
+  [ -f "$ROOT/dist/Castnet-$VERSION.dmg" ] || { echo "dist/Castnet-$VERSION.dmg is missing" >&2; exit 1; }
+fi
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 cp "$ROOT/dist/Castnet-$VERSION.dmg" "$OUT/"

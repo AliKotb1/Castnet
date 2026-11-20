@@ -8,7 +8,7 @@ import Darwin
 // the Castnet app over its Unix socket; the app is launched first if needed.
 // The host keeps no state and exits when the browser closes stdin.
 
-let version = "1.5.0"
+let version = "1.5.1"
 let bundleID = "app.castnet.mac"
 
 let socketPath: String = {
@@ -104,6 +104,17 @@ func sendToApp(_ line: Data, timeout: Int = 15) -> Data? {
     return out.split(separator: 0x0A).first.map { Data($0) }
 }
 
+/// The browser that started this host (our parent process), as its bundle identifier, so the app
+/// knows which browsers have Castnet. Chrome-family browsers may start hosts from a helper app
+/// inside their bundle, so the outermost ".app" in the path is the browser itself.
+let clientApp: String? = {
+    var buf = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+    guard proc_pidpath(getppid(), &buf, UInt32(buf.count)) > 0 else { return nil }
+    let path = String(cString: buf)
+    guard let r = path.range(of: ".app/") else { return nil }
+    return Bundle(path: String(path[..<r.lowerBound]) + ".app")?.bundleIdentifier
+}()
+
 func appIsRunning() -> Bool {
     sendToApp(Data(#"{"type":"ping"}"#.utf8), timeout: 3) != nil
 }
@@ -135,6 +146,10 @@ while let msg = readMessage() {
         writeMessage(["ok": false, "error": "bad message"])
         continue
     }
+    // Tell the app which browser this came from (see clientApp).
+    var tagged = obj
+    if let c = clientApp { tagged["client"] = c }
+    let msg = (try? JSONSerialization.data(withJSONObject: tagged)) ?? msg
     switch type {
     case "ping":
         // Never launch the app just to answer a status check.

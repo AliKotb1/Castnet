@@ -139,7 +139,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let mgr = manager
         let handler: IPCServer.Handler = { message, raw in await mgr.handle(message: message, raw: raw) }
         server = IPCServer(path: Paths.socket.path, handler: handler)
-        bridge = TCPBridgeServer(handler: handler)   // for the Safari extension (sandboxed)
+        // For the Safari extension (sandboxed); everything arriving there comes from Safari.
+        bridge = TCPBridgeServer(handler: { message, raw in
+            var m = message
+            m["client"] = "com.apple.Safari"
+            return await mgr.handle(message: m, raw: raw)
+        })
         do {
             try server?.start()
             try? bridge?.start()

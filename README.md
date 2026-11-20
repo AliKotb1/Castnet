@@ -33,18 +33,22 @@ The name: a cast net is the round fishing net that's thrown to catch everything 
 |---|---|---|
 | ![](docs/screenshots/scheduler.png) | ![](docs/screenshots/batch.png) | ![](docs/screenshots/duplicate.png) |
 
+| Adding the extension to Chrome |
+|---|
+| ![](docs/screenshots/chrome-walkthrough.png) |
+
 | Browser setup | Settings |
 |---|---|
 | ![](docs/screenshots/setup.png) | ![](docs/screenshots/settings.png) |
 
 ## Install (for users)
 
-1. Download **Castnet-1.5.0.dmg** from [Releases](https://github.com/AliKotb1/Castnet/releases/latest), open it and drag **Castnet** into **Applications**.
+1. Download **Castnet-1.5.1.dmg** from [Releases](https://github.com/AliKotb1/Castnet/releases/latest), open it and drag **Castnet** into **Applications**.
 2. Open Castnet. It checks which browsers are actually installed, connects itself to each of them, and opens **Set Up Castnet**, which shows only your browsers. Pick one and follow its steps:
 
 | Browser | Steps in the setup window |
 |---|---|
-| Chrome, Edge, Brave, Arc, Vivaldi, Opera | Open the Extensions page, turn on *Developer mode*, drag the Castnet folder onto the page |
+| Chrome, Edge, Brave, Arc, Vivaldi, Opera | A walkthrough shows each step on a drawing of the browser's Extensions page: open the page, turn on *Developer mode*, drag the Castnet folder onto it. It finishes by itself once the browser has loaded Castnet |
 | Zen, LibreWolf, Floorp, Waterfox, Firefox Developer Edition / Nightly | In `about:config` set `xpinstall.signatures.required` to `false`, then click **Add Castnet to …**. Then click the Castnet toolbar button and choose *Allow on all websites* |
 | Firefox (regular release) | Load it from `about:debugging` as a temporary add-on. Regular Firefox only installs add-ons signed by Mozilla permanently, so this lasts until Firefox restarts. Once the add-on is signed by Mozilla (see [docs/PUBLISHING.md](docs/PUBLISHING.md)) and built in with `SIGNED_XPI`, every Firefox-family browser installs it permanently with one click |
 | Safari | The extension is built into Castnet.app. Until Castnet is signed by Apple, turn on *Allow unsigned extensions* in Safari's **Developer** settings (Safari turns it off again each time it quits), then enable Castnet in *Settings → Extensions* and allow it on all websites |
@@ -181,7 +185,7 @@ node test/e2e.mjs /tmp/x [--youtube]   # real Chrome + extension in a throwaway 
 node test/e2e-renew.mjs /tmp/x         # real Chrome + a headless test copy of Castnet: the video link
                                        # expires mid-download and must be renewed and finished byte-identical
 python3 test/zen-firefox.py /tmp/x [browser-binary]   # Zen/Firefox through Marionette with a throwaway profile
-./test/dmg-test.sh dist/Castnet-1.5.0.dmg   # installs the DMG into a sandbox with no Homebrew and downloads from it
+./test/dmg-test.sh dist/Castnet-1.5.1.dmg   # installs the DMG into a sandbox with no Homebrew and downloads from it
 ```
 
 The e2e tests use a separate test copy of the app (`CASTNET_HOME`, `CASTNET_HEADLESS`): own folder, own settings, own socket, never your real download list.

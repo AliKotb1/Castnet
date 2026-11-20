@@ -36,6 +36,9 @@ enum Snapshot {
             extra = (AnyView(DuplicateView(existing: done, request: done.request, confirm: true, close: {}).environmentObject(manager)), NSSize(width: 460, height: 200))
         } else if args.contains("--countdown") {
             extra = (AnyView(PowerCountdownView(action: .shutDown, reason: "Queue “Night downloads” finished.", model: CountdownModel(seconds: 60), now: {}, cancel: {})), NSSize(width: 460, height: 110))
+        } else if let w = args.firstIndex(of: "--walkthrough"), w + 1 < args.count, let step = Int(args[w + 1]) {
+            let browser = BrowserSetup.known.first { $0.name == (args.contains("--edge") ? "Microsoft Edge" : "Google Chrome") }!
+            extra = (AnyView(ChromiumWalkthrough(browser: browser, step: step).padding(24).frame(width: 640).environmentObject(manager)), NSSize(width: 640, height: 330))
         } else if args.contains("--complete"), let done = manager.items.first(where: { $0.state == .completed }) {
             extra = (AnyView(CompleteView(item: done, close: {}).environmentObject(manager)), NSSize(width: 480, height: 200))
         } else {

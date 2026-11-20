@@ -1007,6 +1007,7 @@ public final class DownloadManager: ObservableObject {
 
     /// Handles a JSON message from castnet-host / the Safari bridge / the CLI.
     public func handle(message: [String: Any], raw: Data) async -> [String: Any] {
+        if let client = message["client"] as? String, !client.isEmpty { noteBrowser(client) }
         switch message["type"] as? String {
         case "formats":
             guard let req = Self.decodeRequest(message["request"]) else { return ["ok": false, "error": "Malformed request"] }
@@ -1026,7 +1027,7 @@ public final class DownloadManager: ObservableObject {
             return ["ok": true, "count": list.count]
         case "ping":
             lastExtensionContact = Date()
-            return ["ok": true, "running": true, "version": castnetVersion,
+            return ["ok": true, "running": true, "version": castnetVersion, "browsers": connectedBrowsers.sorted(),
                     "ffmpeg": settings.ffmpegURL != nil, "ytdlp": settings.ytdlpURL != nil,
                     "renewals": renewalList.count]
         case "show":
@@ -1087,6 +1088,15 @@ public final class DownloadManager: ObservableObject {
         didSet { if lastExtensionContact != nil { Paths.defaults.set(true, forKey: "ExtensionConnected") } }
     }
     public var extensionEverConnected: Bool { Paths.defaults.bool(forKey: "ExtensionConnected") }
+
+    /// Bundle identifiers of the browsers whose Castnet extension has reached the app (kept across launches).
+    @Published public private(set) var connectedBrowsers: Set<String> = Set(Paths.defaults.stringArray(forKey: "ConnectedBrowsers") ?? [])
+
+    private func noteBrowser(_ bundleID: String) {
+        guard !connectedBrowsers.contains(bundleID) else { return }
+        connectedBrowsers.insert(bundleID)
+        Paths.defaults.set(connectedBrowsers.sorted(), forKey: "ConnectedBrowsers")
+    }
 
     /// Set when a newer Castnet is published (see UpdateChecker).
     @Published public var availableUpdate: AppUpdate?
