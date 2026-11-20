@@ -6,7 +6,18 @@ const send = (msg) => chrome.runtime.sendMessage(msg);
 let tab = null;
 let lastSig = '';
 
-const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M10.5 5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5H5"/></svg>';
+/** The "copy link" icon, built as DOM nodes. */
+function copyIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  for (const [k, v] of Object.entries({ viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5' })) svg.setAttribute(k, v);
+  const rect = document.createElementNS(ns, 'rect');
+  for (const [k, v] of Object.entries({ x: '5', y: '5', width: '8.5', height: '8.5', rx: '1.5' })) rect.setAttribute(k, v);
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M10.5 5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5H5');
+  svg.append(rect, path);
+  return svg;
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -49,7 +60,7 @@ function row(entry) {
     const c = el('button', 'icon');
     c.type = 'button';
     c.title = 'Copy link';
-    c.innerHTML = COPY_ICON;
+    c.append(copyIcon());
     c.addEventListener('click', async () => {
       await navigator.clipboard.writeText(entry.copyUrl);
       toast('Link copied.');

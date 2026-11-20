@@ -8,7 +8,7 @@ import Darwin
 // the Castnet app over its Unix socket; the app is launched first if needed.
 // The host keeps no state and exits when the browser closes stdin.
 
-let version = "1.5.1"
+let version = "1.5.2"
 let bundleID = "app.castnet.mac"
 
 let socketPath: String = {

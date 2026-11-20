@@ -172,30 +172,59 @@
     .status { margin: 4px 8px 2px; padding: 6px 8px; border-radius: 5px; font-size: 12px; background: #e7f6ec; color: #17693a; }
     .status.err { background: #fdecec; color: #a12a2a; }
   `;
+  // Icons are built as DOM nodes (no HTML strings are ever parsed into the page).
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function svgIcon(viewBox, shapes, cls) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', viewBox);
+    if (cls) svg.setAttribute('class', cls);
+    for (const attrs of shapes) {
+      const p = document.createElementNS(SVG_NS, 'path');
+      for (const [k, v] of Object.entries(attrs)) p.setAttribute(k, v);
+      svg.append(p);
+    }
+    return svg;
+  }
   // Castnet's mark: a net (white rim) catching a play triangle that points down.
-  const LOGO = '<svg viewBox="0 0 24 24"><path d="M5.9 9.4A6.9 6.9 0 1 0 18.1 9.4" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M8.9 6.2h6.2a1 1 0 0 1 .8 1.6l-3.1 4.7a1 1 0 0 1-1.6 0L8.1 7.8a1 1 0 0 1 .8-1.6z" fill="#FFA24C"/></svg>';
-  const CARET = '<svg class="caret" viewBox="0 0 10 10"><path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const XICON = '<svg viewBox="0 0 10 10"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const LOGO = () => svgIcon('0 0 24 24', [
+    { d: 'M5.9 9.4A6.9 6.9 0 1 0 18.1 9.4', fill: 'none', stroke: '#fff', 'stroke-width': '2.8', 'stroke-linecap': 'round' },
+    { d: 'M8.9 6.2h6.2a1 1 0 0 1 .8 1.6l-3.1 4.7a1 1 0 0 1-1.6 0L8.1 7.8a1 1 0 0 1 .8-1.6z', fill: '#FFA24C' },
+  ]);
+  const CARET = () => svgIcon('0 0 10 10', [
+    { d: 'M1.5 3.5 5 7l3.5-3.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+  ], 'caret');
+  const XICON = () => svgIcon('0 0 10 10', [
+    { d: 'M1.5 1.5l7 7M8.5 1.5l-7 7', stroke: 'currentColor', 'stroke-width': '1.6', 'stroke-linecap': 'round' },
+  ]);
 
   function ensureUi() {
     if (ui) return;
     host = document.createElement('castnet-ui');
     host.style.cssText = 'all: initial !important; position: fixed !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; z-index: 2147483647 !important;';
     const root = host.attachShadow({ mode: 'closed' });
-    root.innerHTML = `<style>${CSS}</style>
-      <div class="wrap" role="toolbar" aria-label="Castnet">
-        <div class="bar">
-          <button class="main" type="button" title="Download this video"><span class="logo">${LOGO}</span><span>Download this video</span>${CARET}</button>
-          <button class="x" type="button" title="Hide until this page is reloaded" aria-label="Close">${XICON}</button>
-        </div>
-        <div class="menu" role="menu"></div>
-      </div>`;
-    ui = {
-      wrap: root.querySelector('.wrap'),
-      main: root.querySelector('.main'),
-      x: root.querySelector('.x'),
-      menu: root.querySelector('.menu'),
-    };
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    const wrap = el('div', 'wrap');
+    wrap.setAttribute('role', 'toolbar');
+    wrap.setAttribute('aria-label', 'Castnet');
+    const bar = el('div', 'bar');
+    const main = el('button', 'main');
+    main.type = 'button';
+    main.title = 'Download this video';
+    const logo = el('span', 'logo');
+    logo.append(LOGO());
+    main.append(logo, el('span', '', 'Download this video'), CARET());
+    const x = el('button', 'x');
+    x.type = 'button';
+    x.title = 'Hide until this page is reloaded';
+    x.setAttribute('aria-label', 'Close');
+    x.append(XICON());
+    const menu = el('div', 'menu');
+    menu.setAttribute('role', 'menu');
+    bar.append(main, x);
+    wrap.append(bar, menu);
+    root.append(style, wrap);
+    ui = { wrap, main, x, menu };
     ui.main.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleMenu(); });
     ui.x.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); dismiss(); });
     for (const t of ['mousedown', 'pointerdown', 'mouseup', 'dblclick', 'contextmenu']) ui.wrap.addEventListener(t, (e) => e.stopPropagation());

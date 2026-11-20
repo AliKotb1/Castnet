@@ -71,7 +71,7 @@ const ff = {
   version: base.version,
   description: base.description,
   browser_specific_settings: {
-    gecko: { id: 'castnet@castnet.app', strict_min_version: '128.0', data_collection_permissions: { required: ['none'] } },
+    gecko: { id: 'castnet@castnet.app', strict_min_version: '140.0', data_collection_permissions: { required: ['none'] } },
   },
   icons: base.icons,
   action: base.action,

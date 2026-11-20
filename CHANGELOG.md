@@ -2,6 +2,12 @@
 
 All notable changes to Castnet. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-11-20
+
+### Changed
+- The browser extension builds its panel and icons as DOM elements instead of HTML strings (as addons.mozilla.org asks).
+- The Firefox add-on needs Firefox 140 or later (and Firefox-based browsers built on it), which can show that Castnet collects no data.
+
 ## [1.5.1] - 2026-11-20
 
 ### Added
@@ -30,5 +36,6 @@ First public release. Versions up to 1.4.0 were private builds named *Grabber*; 
 - Finished files get macOS's quarantine flag like browser downloads, so Gatekeeper checks downloaded apps and disk images.
 - Fully self-contained: yt-dlp, FFmpeg and QuickJS are inside the app; nothing to install with Terminal or Homebrew. Universal (Apple Silicon and Intel), macOS 13 or later.
 
+[1.5.2]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.2
 [1.5.1]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.1
 [1.5.0]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.0
