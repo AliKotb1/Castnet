@@ -112,12 +112,34 @@
     }
   });
 
+  // Settings needed at click time (a click can only be caught synchronously).
+  let clickSettings = null;
+  send({ type: 'getSettings', url: location.href }).then((r) => { clickSettings = r || null; }).catch(() => {});
+  const isPdfLink = (a) => {
+    try {
+      const u = new URL(a.href);
+      return /^https?:$/.test(u.protocol) && /\.pdf$/i.test(u.pathname);
+    } catch { return false; }
+  };
+
   document.addEventListener('click', (e) => {
     const a = e.target?.closest?.('a[href]');
     if (!a) return;
     if (e.altKey) send({ type: 'bypass' });
     const name = a.getAttribute('download');
     if (name) send({ type: 'linkName', url: a.href, name });
+    // PDF links: the browser would open them in its viewer, which isn't a download Castnet can
+    // take over, so the click itself goes to Castnet. ⌥ Option-click (or ⌘/Ctrl/Shift) behaves as usual.
+    const s = clickSettings?.settings;
+    if (e.button === 0 && !e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && isPdfLink(a) &&
+        s?.catchDownloads && s?.catchPdfLinks !== false && !clickSettings.disabled) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const href = a.href;
+      send({ type: 'catchLink', url: href, name: name || null }).then((r) => {
+        if (!r?.ok) location.href = href;   // Castnet can't fetch it: open it in the browser after all
+      }).catch(() => { location.href = href; });
+    }
   }, true);
 
   // ------------------------------------------------------------ the panel

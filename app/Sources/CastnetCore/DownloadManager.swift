@@ -389,6 +389,39 @@ public final class DownloadManager: ObservableObject {
         return (add(r, confirm: confirm), false)
     }
 
+    /// A download the browser finished itself because Castnet couldn't take it over (a one-time link,
+    /// a file the page made, a form download, or one that finished before the browser reported it):
+    /// it's listed in Castnet as finished and moved into Castnet's folder if it was saved elsewhere.
+    @discardableResult
+    public func adopt(path: String, url: String, pageUrl: String?) -> DownloadItem? {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard path.hasPrefix("/"), fm.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else { return nil }
+        if let known = items.first(where: { $0.outputPaths.contains(path) }) { return known }
+        var file = URL(fileURLWithPath: path).standardizedFileURL
+        let category = FileCategory.of(filename: file.lastPathComponent, kind: .file)
+        let dir = settings.folder(for: category).standardizedFileURL
+        if dir.path != file.deletingLastPathComponent().path {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            let dest = uniqueURL(in: dir, filename: file.lastPathComponent)
+            if (try? fm.moveItem(at: file, to: dest)) != nil { file = dest }
+        }
+        var r = DownloadRequest(url: url.isEmpty ? file.absoluteString : url, kind: .file, filename: file.lastPathComponent, pageUrl: pageUrl)
+        r.referer = pageUrl
+        let item = DownloadItem(request: r, filename: file.lastPathComponent, directory: file.deletingLastPathComponent(), state: .completed)
+        let size = (try? fm.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value ?? 0
+        item.received = size
+        item.total = size
+        item.outputPaths = [file.path]
+        item.finishedAt = Date()
+        item.lastTry = Date()
+        item.detail = "Completed"
+        items.insert(item, at: 0)
+        scheduleSave()
+        onFinished?(item)
+        return item
+    }
+
     /// Batch download: adds many links at once, skipping ones already in the list.
     @discardableResult
     public func addBatch(_ urls: [String], startNow: Bool, queue: UUID? = nil) -> (added: Int, skipped: Int) {
@@ -1007,7 +1040,10 @@ public final class DownloadManager: ObservableObject {
 
     /// Handles a JSON message from castnet-host / the Safari bridge / the CLI.
     public func handle(message: [String: Any], raw: Data) async -> [String: Any] {
-        if let client = message["client"] as? String, !client.isEmpty { noteBrowser(client) }
+        if let client = message["client"] as? String, !client.isEmpty {
+            noteBrowser(client)
+            if let v = message["ext"] as? String, extensionVersions[client] != v { extensionVersions[client] = v }
+        }
         switch message["type"] as? String {
         case "formats":
             guard let req = Self.decodeRequest(message["request"]) else { return ["ok": false, "error": "Malformed request"] }
@@ -1027,7 +1063,7 @@ public final class DownloadManager: ObservableObject {
             return ["ok": true, "count": list.count]
         case "ping":
             lastExtensionContact = Date()
-            return ["ok": true, "running": true, "version": castnetVersion, "browsers": connectedBrowsers.sorted(),
+            return ["ok": true, "running": true, "version": castnetVersion, "browsers": connectedBrowsers.sorted(), "extensions": extensionVersions,
                     "ffmpeg": settings.ffmpegURL != nil, "ytdlp": settings.ytdlpURL != nil,
                     "renewals": renewalList.count]
         case "show":
@@ -1056,6 +1092,12 @@ public final class DownloadManager: ObservableObject {
             }
             let (item, existing) = submit(req, confirm: message["confirm"] as? Bool ?? true)
             return ["ok": true, "id": item.id.uuidString, "filename": item.filename, "existing": existing]
+        case "adopt":
+            guard let path = message["path"] as? String,
+                  let item = adopt(path: path, url: message["url"] as? String ?? "", pageUrl: message["pageUrl"] as? String) else {
+                return ["ok": false, "error": "No finished file at that location"]
+            }
+            return ["ok": true, "id": item.id.uuidString, "filename": item.filename, "path": item.outputPaths.first ?? ""]
         case "renewals":
             lastExtensionContact = Date()
             return ["ok": true, "items": renewalList]
@@ -1094,6 +1136,9 @@ public final class DownloadManager: ObservableObject {
         didSet { if lastExtensionContact != nil { Paths.defaults.set(true, forKey: "ExtensionConnected") } }
     }
     public var extensionEverConnected: Bool { Paths.defaults.bool(forKey: "ExtensionConnected") }
+
+    /// The extension version each browser runs (bundle identifier → version), as last reported.
+    @Published public private(set) var extensionVersions: [String: String] = [:]
 
     /// Bundle identifiers of the browsers whose Castnet extension has reached the app (kept across launches).
     @Published public private(set) var connectedBrowsers: Set<String> = Set(Paths.defaults.stringArray(forKey: "ConnectedBrowsers") ?? [])

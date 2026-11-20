@@ -69,34 +69,49 @@ const browserList = () => ext.evaluate(() => new Promise((r) => chrome.downloads
 const page = await ctx.newPage();
 await page.goto('http://127.0.0.1:8765/takeover.html');
 await sleep(800);
-for (const id of ['unknown', 'tiny', 'once', 'blob']) {
+for (const id of ['unknown', 'tiny', 'once', 'blob', 'pdf', 'canvas']) {
   await page.click(`#${id}`);
   await sleep(1500);
 }
+const stayed = page.url().endsWith('/takeover.html');
 
 // Castnet's side
 let items = [];
-for (let i = 0; i < 40; i++) {
+for (let i = 0; i < 60; i++) {
   items = appItems();
-  if (items.filter((x) => x.state === 'completed').length >= 2) break;
+  if (items.filter((x) => x.state === 'completed').length >= 6) break;
   await sleep(500);
 }
 const byName = (n) => items.find((x) => x.filename === n);
-const unknown = byName('notes.qqq'), tiny = byName('tiny.json');
-check(unknown?.state === 'completed', `a file type that wasn't on the old list went to Castnet (${unknown?.state ?? 'missing'})`);
+const done = (n) => byName(n)?.state === 'completed';
+const unknown = byName('notes.qqq');
+check(done('notes.qqq'), `a file type that wasn't on the old list went to Castnet (${unknown?.state ?? 'missing'})`);
 check(unknown?.outputs?.[0] && sha(unknown.outputs[0]) === sha(path.join(media, 'aonly.mp4')), '…and Castnet saved the exact file');
-check(tiny?.state === 'completed', `a 113-byte file went to Castnet (${tiny?.state ?? 'missing'})`);
-check(!items.some((x) => /once/.test(x.filename)), 'the one-time link was NOT taken from the browser');
-check(!items.some((x) => /made-here/.test(x.filename)), 'the file the page made itself was NOT taken from the browser');
+check(done('tiny.json'), `a 113-byte file went to Castnet (${byName('tiny.json')?.state ?? 'missing'})`);
+check(done('doc.pdf') && stayed, `a click on a PDF link went to Castnet and the page stayed put (${byName('doc.pdf')?.state ?? 'missing'})`);
+const canvas = byName('week3-notes.pdf');
+check(done('week3-notes.pdf') && sha(canvas.outputs[0]) === sha(path.join(media, 'aonly.mp4')),
+  `a download that redirects to signed storage (like Canvas) went to Castnet (${canvas?.state ?? 'missing'})`);
+// Only the browser could fetch these two; it finished them and Castnet took the files.
+const once = byName('once.webm'), made = byName('made-here.txt');
+check(done('once.webm') && sha(once.outputs[0]) === sha(path.join(media, 'vonly.webm')),
+  `the one-time link finished in the browser, then Castnet took the file (${once?.state ?? 'missing'})`);
+check(done('made-here.txt') && fs.readFileSync(made.outputs[0], 'utf8') === 'made by the page',
+  `the file the page made itself ended up in Castnet too (${made?.state ?? 'missing'})`);
+const castnetFolder = fs.realpathSync(path.join(home, 'Downloads'));
+check([once, made].every((x) => x?.outputs?.[0] && path.dirname(fs.realpathSync(x.outputs[0])) === castnetFolder), "…moved into Castnet's folder");
 
-// The browser's side
-await sleep(2500);
+// The app knows which extension version Chrome runs (it shows a banner when that's out of date).
+const extVersions = appCall({ type: 'ping' }).extensions || {};
+const ownVersion = JSON.parse(fs.readFileSync(path.join(root, 'dist/extensions/chrome/manifest.json'), 'utf8')).version;
+check(extVersions['com.google.Chrome'] === ownVersion, `the app knows Chrome runs extension ${extVersions['com.google.Chrome'] ?? 'unknown'}`);
+
+// The browser's side: nothing left behind, nothing saved twice.
+await sleep(1500);
 const list = await browserList();
-const inBrowser = (n) => list.find((d) => (d.filename || '').endsWith(n));
-check(!inBrowser('notes.qqq') && !inBrowser('tiny.json'), 'the browser dropped its copies of the files Castnet took');
-check(inBrowser('once.webm')?.state === 'complete' && fs.existsSync(path.join(browserDownloads, 'once.webm')),
-  `the one-time link still finished in the browser (${inBrowser('once.webm')?.state ?? 'missing'})`);
-check(inBrowser('made-here.txt')?.state === 'complete', `the page-made file finished in the browser (${inBrowser('made-here.txt')?.state ?? 'missing'})`);
+const names = ['notes.qqq', 'tiny.json', 'once.webm', 'made-here.txt', 'doc.pdf', 'week3-notes.pdf'];
+check(!list.some((d) => names.some((n) => (d.filename || '').endsWith(n))), "the browser's download list has none of them");
+check(fs.readdirSync(browserDownloads).filter((f) => !f.startsWith('.')).length === 0, "the browser's download folder is empty (no second copies)");
 
 await ctx.close();
 appProc.kill();

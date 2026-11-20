@@ -92,7 +92,7 @@ To sign for distribution, set `SIGN_IDENTITY="Developer ID Application: …"` an
 - **YouTube, Vimeo, X, TikTok, Instagram, Facebook and 30+ other sites** list every available quality, from 4K down to 144p plus audio only, even ones you haven't played. Downloads come out as MP4 (H.264/AAC where the site offers it) with picture and sound merged.
 - **The toolbar popup** shows the same quality list, has an **On for this site** switch, and a **Download all links…** button.
 - **Right-click menu:** *Download with Castnet* (on a link), *Download this video with Castnet*, *Download the video on this page*, *Download all links with Castnet*, *Download selected links with Castnet*. The two "links" items open a link picker with type filters.
-- **Every download the browser starts goes to Castnet**, of any type and size, in Chrome-family and Firefox-family browsers. If Castnet isn't running, it's started. Castnet first checks it can fetch the same file; if it can't (a one-time link, a login page instead of the file), the browser keeps the download, so nothing is lost. Files a page makes itself (`blob:`/`data:` links), form (POST) downloads and private windows stay in the browser. **Hold ⌥ Option while clicking** a link to keep that one in the browser. *Settings* in the popup can limit it to certain file types or turn it off. Safari doesn't let extensions take over downloads.
+- **Every download the browser starts goes to Castnet**, of any type and size, in Chrome-family and Firefox-family browsers. If Castnet isn't running, it's started. Castnet downloads it itself when it can fetch the same file (it checks first). When only the browser can (a one-time link, a file the page made, a form download), the browser finishes it and Castnet takes the finished file into its list and folder, so it still ends up in one place, once. **Links to PDFs** go to Castnet instead of opening in the browser's viewer. **Hold ⌥ Option while clicking** to keep one in the browser. Private windows stay private. *Settings* in the popup can limit it to certain file types or turn it off. Safari doesn't let extensions take over downloads.
 
 **In the app**
 
@@ -182,8 +182,8 @@ How it finds media on any site, in three layers:
                             # download-manager tests (queues, scheduler, duplicates, batch, quarantine)
 node test/e2e.mjs /tmp/x [--youtube]   # real Chrome + extension in a throwaway profile; requests are
                                        # recorded by test/fake-host.py, never sent to your app
-node test/e2e-takeover.mjs /tmp/x      # real Chrome + a test copy of Castnet: every download is taken over,
-                                       # except what only the browser can finish (which still completes)
+node test/e2e-takeover.mjs /tmp/x      # real Chrome + a test copy of Castnet: every download (and PDF link) ends up in
+                                       # Castnet, including ones only the browser can fetch
 node test/e2e-renew.mjs /tmp/x         # real Chrome + a headless test copy of Castnet: the video link
                                        # expires mid-download and must be renewed and finished byte-identical
 python3 test/zen-firefox.py /tmp/x [browser-binary]   # Zen/Firefox through Marionette with a throwaway profile

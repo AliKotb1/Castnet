@@ -8,7 +8,7 @@ import Darwin
 // the Castnet app over its Unix socket; the app is launched first if needed.
 // The host keeps no state and exits when the browser closes stdin.
 
-let version = "1.5.3"
+let version = "1.5.4"
 let bundleID = "app.castnet.mac"
 
 let socketPath: String = {
@@ -174,7 +174,7 @@ while let msg = readMessage() {
         } else {
             writeMessage(["ok": false, "error": "Castnet is not running"])
         }
-    case "download", "downloadBatch", "formats", "show", "renew":
+    case "download", "downloadBatch", "formats", "show", "renew", "adopt":
         // Listing a site's qualities can take a while (the site is queried live).
         let wait = type == "formats" ? 100 : (type == "renew" ? 40 : 15)
         var reply = sendToApp(msg, timeout: wait)

@@ -2,6 +2,16 @@
 
 All notable changes to Castnet. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.4] - 2026-11-20
+
+### Added
+- **Files the browser had to download itself now end up in Castnet too.** When only the browser can fetch a download (a one-time link, a file the page made, a form download, or one that finished before the browser reported it, which happens with small files in Firefox and Zen), the browser finishes it and Castnet takes the finished file into its list and folder. No second download, no second copy.
+- **PDF links go to Castnet.** A click on a link to a PDF downloads it with Castnet instead of opening the browser's viewer (⌥ Option-click opens it as before). If Castnet can't fetch it, the browser opens it.
+- The app shows when a browser runs an older version of the extension, with a button to update it.
+
+### Changed
+- The "only these file types" list includes PDF and office documents, and the popup shows it only when "Every file type" is off.
+
 ## [1.5.3] - 2026-11-20
 
 ### Changed
@@ -45,6 +55,7 @@ First public release. Versions up to 1.4.0 were private builds named *Grabber*; 
 - Finished files get macOS's quarantine flag like browser downloads, so Gatekeeper checks downloaded apps and disk images.
 - Fully self-contained: yt-dlp, FFmpeg and QuickJS are inside the app; nothing to install with Terminal or Homebrew. Universal (Apple Silicon and Intel), macOS 13 or later.
 
+[1.5.4]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.4
 [1.5.3]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.3
 [1.5.2]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.2
 [1.5.1]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.1

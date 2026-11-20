@@ -32,12 +32,19 @@ const MAX_VERIFY_PER_TAB = 40;
 const WATCH_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest', 'media', 'object', 'other'];
 const PROBE_MIN_BYTES = 16 * 1024;
 
+const OLD_DEFAULT_TYPES = 'zip rar 7z tar gz tgz bz2 xz zst dmg pkg iso img exe msi apk ipa deb rpm jar ' +
+  'mp4 mkv webm mov avi flv wmv m4v mpg mpeg 3gp mp3 m4a flac wav aac ogg opus wma torrent';
 const DEFAULT_SETTINGS = {
   catchDownloads: true,
   // Every download goes to Castnet. Off = only the file types below, from minCatchSizeKB up.
   catchAll: true,
   catchExtensions: 'zip rar 7z tar gz tgz bz2 xz zst dmg pkg iso img exe msi apk ipa deb rpm jar ' +
-    'mp4 mkv webm mov avi flv wmv m4v mpg mpeg 3gp mp3 m4a flac wav aac ogg opus wma torrent',
+    'mp4 mkv webm mov avi flv wmv m4v mpg mpeg 3gp mp3 m4a flac wav aac ogg opus wma torrent ' +
+    'pdf doc docx xls xlsx ppt pptx odt ods odp rtf epub csv',
+  // PDF links open in the browser's viewer, which isn't a download; catch the click instead.
+  catchPdfLinks: true,
+  // When Castnet can't fetch a download itself, the browser finishes it and Castnet takes the file.
+  adoptBrowserDownloads: true,
   minCatchSizeKB: 512,
   minMediaSizeKB: 300,
   showOverlay: true,
@@ -78,6 +85,8 @@ let appStatus = { checkedAt: 0, ok: false, info: null, error: null };
 const ready = (async () => {
   const stored = await chrome.storage.local.get('settings');
   settings = { ...DEFAULT_SETTINGS, ...(stored.settings || {}) };
+  // Saved settings that still hold the old default type list get the new one (with PDF and documents).
+  if (settings.catchExtensions === OLD_DEFAULT_TYPES) settings.catchExtensions = DEFAULT_SETTINGS.catchExtensions;
   const saved = await session.get(null);
   const open = new Set((await chrome.tabs.query({})).map((t) => t.id));
   for (const [k, v] of Object.entries(saved)) {
@@ -425,10 +434,13 @@ chrome.tabs.onReplaced?.addListener((added, removed) => {
 
 // ---------------------------------------------------------------- native messaging
 
+const OWN_VERSION = chrome.runtime.getManifest().version;
+
 function sendNative(message, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('The Castnet app did not answer in time.')), timeoutMs);
-    chrome.runtime.sendNativeMessage(HOST, message, (response) => {
+    // ext: the app shows when a browser runs an older version of this extension.
+    chrome.runtime.sendNativeMessage(HOST, { ...message, ext: OWN_VERSION }, (response) => {
       clearTimeout(timer);
       const err = chrome.runtime.lastError;
       if (err) reject(new Error(err.message));
@@ -919,6 +931,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'bypass':
         bypassUntil = Date.now() + 5000;
         return {};
+      case 'catchLink': {
+        // A click on a PDF link (see content.js): Castnet downloads it if it can fetch it,
+        // otherwise the page opens it as usual.
+        const url = msg.url || '';
+        const pageUrl = sender.tab?.url || null;
+        if (!/^https?:/i.test(url) || !settings.catchDownloads || settings.catchPdfLinks === false || isDisabledUrl(pageUrl || url)) {
+          return { ok: false };
+        }
+        let last = '';
+        try { last = decodeURIComponent(new URL(url).pathname.split('/').pop() || ''); } catch { /* keep empty */ }
+        const request = {
+          url, kind: KIND.FILE, filename: msg.name || last || null, pageUrl, referer: pageUrl,
+          userAgent: navigator.userAgent, headers: pageUrl ? { Referer: pageUrl } : {},
+          cookies: await cookiesFor([url, pageUrl]), mime: /\.pdf$/i.test(last) ? 'application/pdf' : null,
+        };
+        try {
+          const res = await sendNative({ type: 'download', request, verify: true }, 45000);
+          return { ok: !!res?.ok };
+        } catch {
+          return { ok: false };
+        }
+      }
       case 'linkName':
         if (msg.url && msg.name) {
           linkNames.set(msg.url, { name: msg.name, ts: Date.now() });
@@ -1030,27 +1064,29 @@ function catchExtSet() {
   return new Set(settings.catchExtensions.toLowerCase().split(/[\s,;|]+/).filter(Boolean));
 }
 
-// Greedy by default: every download the browser starts is handed to Castnet. What stays in the
-// browser is only what can't work anywhere else: files a page made itself (blob:/data:), form
-// (POST) downloads, private windows, downloads already finished, and anything the app checks and
-// can't fetch the same way (a one-time link, a login page instead of the file, a different size).
+// Greedy by default: every download the browser starts goes to Castnet. Castnet downloads it itself
+// when it can fetch the same file. When only the browser can (a file the page made itself, a form
+// download, a one-time link, or one that finished before the browser reported it), the browser
+// finishes it and Castnet takes the finished file. Left alone: ⌥ Option-clicks, sites where Castnet
+// is off, private windows, and (if you chose a list) other file types.
 chrome.downloads?.onCreated.addListener(async (dl) => {
   await ready;
   if (!settings.catchDownloads || ownDownloads.has(dl.id) || dl.byExtensionId === chrome.runtime.id) return;
   // Option(Alt)-click on a link = "let the browser download it" (the Option key keeps it in the browser).
   if (Date.now() < bypassUntil) { bypassUntil = 0; return; }
+  if (dl.incognito) return;
   const url = dl.finalUrl || dl.url;
-  if (!/^https?:/i.test(url) || dl.incognito || dl.state === 'complete') return;
   if (isDisabledUrl(dl.referrer || url)) return;
-  const postedAt = recentPosts.get(url);
-  if (postedAt && Date.now() - postedAt < 60000) return; // form POST downloads can't be replayed
-
   const named = linkNames.get(url)?.name || '';
   if (!settings.catchAll) {
     const nameExt = (/\.([a-z0-9]{1,8})$/i.exec(dl.filename || named)?.[1] || '').toLowerCase();
     const ext = nameExt || extOf(url) || MIME_EXT[(dl.mime || '').toLowerCase()] || '';
     if (!catchExtSet().has(ext)) return;
     if (dl.totalBytes > 0 && dl.totalBytes < settings.minCatchSizeKB * 1024) return;
+  }
+  const postedAt = recentPosts.get(url);
+  if (!/^https?:/i.test(url) || dl.state === 'complete' || (postedAt && Date.now() - postedAt < 60000)) {
+    return adoptWhenDone(dl);   // only the browser can fetch it, or it already did
   }
 
   // Pause at once so no bytes are wasted while Castnet checks the link. The bridge starts
@@ -1077,7 +1113,37 @@ chrome.downloads?.onCreated.addListener(async (dl) => {
       return;
     }
   } catch { /* fall through */ }
+  await adoptWhenDone(dl);   // noted before resuming, so the moment it finishes can't be missed
   chrome.downloads.resume(dl.id).catch(() => {});
+});
+
+/** Castnet takes the file once the browser has finished it (see onCreated). */
+async function adoptWhenDone(dl) {
+  if (!settings.adoptBrowserDownloads) return;
+  await session.set({ [`adopt:${dl.id}`]: Date.now() });   // survives the background restarting
+  const [now] = await chrome.downloads.search({ id: dl.id }).catch(() => []);
+  if (now?.state === 'complete') adoptNow(dl.id);           // it finished before we could watch for it
+}
+
+const adopting = new Set();
+async function adoptNow(id) {
+  const key = `adopt:${id}`;
+  if (adopting.has(id) || !(await session.get(key))?.[key]) return;
+  adopting.add(id);
+  await session.remove(key);
+  const [d] = await chrome.downloads.search({ id }).catch(() => []);
+  if (!d || d.state !== 'complete' || !d.filename || d.exists === false) return;
+  const url = d.finalUrl || d.url || '';
+  try {
+    const res = await sendNative({ type: 'adopt', path: d.filename, url: /^https?:/i.test(url) ? url : '', pageUrl: d.referrer || null }, 30000);
+    if (res?.ok) await chrome.downloads.erase({ id }).catch(() => {});   // it now lives in Castnet
+  } catch { /* the browser keeps listing it */ }
+  adopting.delete(id);
+}
+
+chrome.downloads?.onChanged.addListener(async (delta) => {
+  if (delta.state?.current !== 'complete') return;
+  adoptNow(delta.id);
 });
 
 chrome.downloads?.onChanged.addListener((delta) => {

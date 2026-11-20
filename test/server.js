@@ -137,8 +137,22 @@ http.createServer((req, res) => {
 <a id="tiny" href="/player.json?k=${Date.now()}" download="tiny.json">tiny.json</a>
 <a id="once" href="/once/vonly.webm?t=${Date.now()}" download="once.webm">once.webm</a>
 <a id="blob" download="made-here.txt">made-here.txt</a>
+<a id="pdf" href="/doc.pdf?k=${Date.now()}">Lecture slides (PDF)</a>
+<a id="canvas" href="/r/attach/aonly.mp4?as=week3-notes.pdf&k=${Date.now()}">Download week 3 notes</a>
 <script>document.getElementById('blob').href = URL.createObjectURL(new Blob(['made by the page'], { type: 'text/plain' }));</script>
 </body></html>`);
+  }
+  // A small real PDF (browsers open these in their viewer unless something catches the click).
+  if (p === '/doc.pdf') {
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+      '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n');
+    res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': pdf.length });
+    return res.end(pdf);
+  }
+  // /r/<path>: a redirect to <path>, like a learning site's download link that hops to signed storage.
+  if (p.startsWith('/r/')) {
+    res.writeHead(302, { Location: p.slice(2) + url.search });
+    return res.end();
   }
   // One-time links (like some signed download URLs): the first request works, later ones get 410.
   if (p.startsWith('/once/')) {

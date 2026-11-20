@@ -112,8 +112,10 @@ async function loadSettings() {
   $('catchDownloads').checked = !!settings.catchDownloads;
   $('showOverlay').checked = !!settings.showOverlay;
   $('catchAll').checked = settings.catchAll !== false;
+  $('catchPdfLinks').checked = settings.catchPdfLinks !== false;
+  $('adoptBrowserDownloads').checked = settings.adoptBrowserDownloads !== false;
   $('catchExtensions').value = settings.catchExtensions;
-  $('catchExtensions').disabled = $('catchAll').checked;
+  $('typesField').hidden = $('catchAll').checked;   // the list only matters when "Every file type" is off
   $('minMediaSizeKB').value = settings.minMediaSizeKB;
 }
 
@@ -164,9 +166,11 @@ async function checkHostAccess() {
   $('showOverlay').addEventListener('change', (e) => saveSetting('showOverlay', e.target.checked));
   $('catchExtensions').addEventListener('change', (e) => saveSetting('catchExtensions', e.target.value));
   $('catchAll').addEventListener('change', (e) => {
-    $('catchExtensions').disabled = e.target.checked;
+    $('typesField').hidden = e.target.checked;
     saveSetting('catchAll', e.target.checked);
   });
+  $('catchPdfLinks').addEventListener('change', (e) => saveSetting('catchPdfLinks', e.target.checked));
+  $('adoptBrowserDownloads').addEventListener('change', (e) => saveSetting('adoptBrowserDownloads', e.target.checked));
   $('minMediaSizeKB').addEventListener('change', (e) => saveSetting('minMediaSizeKB', Math.max(0, Number(e.target.value) || 0)));
 
   setInterval(refresh, 1500);

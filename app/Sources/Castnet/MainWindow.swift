@@ -84,6 +84,16 @@ struct ContentView: View {
 
     private var selected: [DownloadItem] { manager.items.filter { list.selection.contains($0.id) } }
 
+    /// Browsers running an older Castnet extension: Firefox-family browsers don't update an add-on
+    /// installed from a file, and Chrome-family ones load the updated folder only when they restart.
+    private var outdatedAddons: [BrowserSetup.Browser] {
+        BrowserSetup.installed.filter { b in
+            b.family != .safari && b.bundleIDs.contains { id in
+                manager.extensionVersions[id].map { ExtractorUpdater.isNewer(castnetVersion, than: $0) } ?? false
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             MainToolbar(selected: selected, addURL: addURL, list: list)
@@ -91,6 +101,20 @@ struct ContentView: View {
             if let u = manager.availableUpdate {
                 Banner(icon: "arrow.down.app", text: "Castnet \(u.version) is available.", button: "Download") {
                     if let url = URL(string: u.url) { NSWorkspace.shared.open(url) }
+                }
+            }
+            ForEach(outdatedAddons, id: \.name) { b in
+                if b.family == .firefox {
+                    Banner(icon: "arrow.triangle.2.circlepath", text: "Castnet in \(b.name) is an older version. Update it to get the latest fixes.",
+                           button: "Update in \(b.name)") {
+                        BrowserSetup.openFile(BrowserSetup.firefoxAddon, in: b)
+                    }
+                } else {
+                    Banner(icon: "arrow.triangle.2.circlepath",
+                           text: "Castnet in \(b.name) is an older version. Restart \(b.name), or click ↻ on Castnet on its Extensions page.",
+                           button: "Open Extensions") {
+                        BrowserSetup.open("\(b.pageScheme)://extensions", in: b)
+                    }
                 }
             }
             if !manager.extensionEverConnected {

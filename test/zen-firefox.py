@@ -45,10 +45,25 @@ check(bool(r and r.get('ok')), 'test instance of Castnet is running')
 # --- native-messaging registration for Firefox-family browsers (the real app writes the same file)
 manifest = {'name': 'app.castnet.host', 'description': 'Castnet download manager',
             'path': os.path.join(app, 'castnet-host'), 'type': 'stdio', 'allowed_extensions': ['castnet@castnet.app']}
+# Firefox-family browsers only read these from your own Library folders, so the test borrows them:
+# what's there now is saved and put back when the test ends (even if it crashes), so your browsers
+# never stay pointed at the test build. (While the test runs, a Zen you have open uses it too.)
+saved_manifests = {}
 for d in ['Mozilla', 'zen']:
     p = os.path.expanduser(f'~/Library/Application Support/{d}/NativeMessagingHosts')
     os.makedirs(p, exist_ok=True)
-    with open(os.path.join(p, 'app.castnet.host.json'), 'w') as f: json.dump(manifest, f, indent=2)
+    f = os.path.join(p, 'app.castnet.host.json')
+    saved_manifests[f] = open(f, 'rb').read() if os.path.exists(f) else None
+    with open(f, 'w') as out: json.dump(manifest, out, indent=2)
+
+def restore_manifests():
+    for f, data in saved_manifests.items():
+        if data is None:
+            try: os.remove(f)
+            except FileNotFoundError: pass
+        else:
+            with open(f, 'wb') as out: out.write(data)
+atexit.register(restore_manifests)
 
 # --- throwaway profile + browser with Marionette
 shutil.rmtree(profile, ignore_errors=True)
@@ -193,6 +208,19 @@ for _ in range(40):
 check(bool(taken) and taken['state'] == 'completed', f"a download of an unlisted file type went to Castnet ({taken and taken['state']})")
 time.sleep(2)
 check(not any(f.startswith('notes.') for f in os.listdir(zen_downloads)), 'the browser kept no second copy')
+
+# --- a click on a PDF link goes to Castnet instead of opening in the browser's viewer
+m.cmd('WebDriver:Navigate', {'url': 'http://127.0.0.1:8765/takeover.html'})
+time.sleep(1.5)
+pr = js('const r = document.getElementById("pdf").getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]')
+click(int(pr[0]), int(pr[1]))
+pdf = None
+for _ in range(30):
+    time.sleep(0.5)
+    pdf = next((i for i in (host({'type': 'list'}) or {}).get('items', []) if i['filename'] == 'doc.pdf'), None)
+    if pdf and pdf['state'] == 'completed': break
+check(bool(pdf) and pdf['state'] == 'completed', f"a click on a PDF link went to Castnet ({pdf and pdf['state']})")
+check(js('return location.pathname') == '/takeover.html', 'the page stayed put (no PDF viewer)')
 if not (taken and taken['state'] == 'completed'):
     m.cmd('Marionette:SetContext', {'value': 'chrome'})
     popup = m.cmd('WebDriver:ExecuteScript', {'script': 'return WebExtensionPolicy.getByID("castnet@castnet.app").getURL("popup/popup.html")', 'args': []}).get('value')

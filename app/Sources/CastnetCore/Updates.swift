@@ -25,7 +25,7 @@ public enum ExtractorUpdater {
 
     /// "2026.10.26" or "2026.10.26.1" → comparable integers.
     static func parts(_ v: String) -> [Int] { v.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) } }
-    static func isNewer(_ a: String, than b: String) -> Bool {
+    public static func isNewer(_ a: String, than b: String) -> Bool {
         let x = parts(a), y = parts(b)
         for i in 0..<max(x.count, y.count) {
             let l = i < x.count ? x[i] : 0, r = i < y.count ? y[i] : 0
