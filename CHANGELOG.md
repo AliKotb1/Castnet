@@ -2,6 +2,15 @@
 
 All notable changes to Castnet. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.3] - 2026-11-20
+
+### Changed
+- **Every download goes to Castnet.** The extension now takes over all downloads the browser starts, of any file type and size, instead of a list of types above 512 KB. Settings → "Every file type" can switch back to a list.
+- If Castnet isn't running when a download starts, it's started, instead of the browser keeping the download.
+
+### Added
+- Before the browser's copy of a download is dropped, Castnet checks it can fetch the same file (the server answers with it, not an error or a login page, and the size matches). If not, the browser keeps the download, so one-time links and downloads that need the browser itself are never lost.
+
 ## [1.5.2] - 2026-11-20
 
 ### Changed
@@ -36,6 +45,7 @@ First public release. Versions up to 1.4.0 were private builds named *Grabber*; 
 - Finished files get macOS's quarantine flag like browser downloads, so Gatekeeper checks downloaded apps and disk images.
 - Fully self-contained: yt-dlp, FFmpeg and QuickJS are inside the app; nothing to install with Terminal or Homebrew. Universal (Apple Silicon and Intel), macOS 13 or later.
 
+[1.5.3]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.3
 [1.5.2]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.2
 [1.5.1]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.1
 [1.5.0]: https://github.com/AliKotb1/Castnet/releases/tag/v1.5.0

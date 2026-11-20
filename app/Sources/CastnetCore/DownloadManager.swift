@@ -1048,6 +1048,12 @@ public final class DownloadManager: ObservableObject {
                 let (ok, _) = await renew(old, with: req)
                 if ok { return ["ok": true, "renewed": true, "id": old.id.uuidString, "filename": old.filename] }
             }
+            // A download the browser already started: take it only if Castnet can fetch the same file,
+            // otherwise the browser keeps it (one-time links, downloads that need the browser itself).
+            if message["verify"] as? Bool == true, req.kind == .file, req.audioUrl == nil {
+                let (ok, reason) = await LinkProbe.check(req)
+                if !ok { return ["ok": false, "keepInBrowser": true, "error": reason ?? "Castnet can’t fetch this link"] }
+            }
             let (item, existing) = submit(req, confirm: message["confirm"] as? Bool ?? true)
             return ["ok": true, "id": item.id.uuidString, "filename": item.filename, "existing": existing]
         case "renewals":

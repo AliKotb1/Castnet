@@ -49,7 +49,12 @@ enum Snapshot {
             : status ? AnyView(StatusView(item: first!, close: {}).environmentObject(manager))
             : info ? AnyView(DownloadInfoView(item: first!, close: {}).environmentObject(manager))
             : AnyView(ContentView(addURL: AddURLModel()).environmentObject(manager)))
-        let size = extra?.1 ?? (setup ? NSSize(width: 640, height: 560) : settingsShot ? NSSize(width: 560, height: 700)
+        // --size WxH overrides the window size (e.g. for store screenshots).
+        let custom: NSSize? = args.firstIndex(of: "--size").flatMap { i in
+            let parts = i + 1 < args.count ? args[i + 1].split(separator: "x").compactMap { Double($0) } : []
+            return parts.count == 2 ? NSSize(width: parts[0], height: parts[1]) : nil
+        }
+        let size = custom ?? extra?.1 ?? (setup ? NSSize(width: 640, height: 560) : settingsShot ? NSSize(width: 560, height: 700)
             : status ? NSSize(width: 560, height: 360) : info ? NSSize(width: 520, height: 330) : NSSize(width: 1060, height: 610))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],

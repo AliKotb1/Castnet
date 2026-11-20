@@ -4,7 +4,7 @@ installs dist/extensions/Castnet.xpi as a temporary add-on, opens the test page,
 "Download this video" panel, and checks the download reaches a headless test instance of Castnet.
    python3 test/zen-firefox.py <scratch-dir> [/path/to/browser-binary]
 """
-import json, os, socket, struct, subprocess, sys, time, hashlib, shutil
+import atexit, json, os, socket, struct, subprocess, sys, time, hashlib, shutil
 
 scratch = os.path.abspath(sys.argv[1])
 browser = sys.argv[2] if len(sys.argv) > 2 else '/Applications/Zen.app/Contents/MacOS/zen'
@@ -27,6 +27,9 @@ settings = json.dumps({'downloadDirectory': os.path.join(home, 'Downloads'), 'sh
 subprocess.run(['defaults', 'write', 'app.castnet.mac.test', 'CastnetSettings', '-data', settings.encode().hex()], check=True)
 env = dict(os.environ, CASTNET_HOME=home, CASTNET_HEADLESS='1', MOZ_REMOTE_ALLOW_SYSTEM_ACCESS='1')
 app_proc = subprocess.Popen([os.path.join(app, 'Castnet')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+procs = [app_proc]
+# Always stop the browser and the test app, even if a check crashes (leftovers would answer the next run).
+atexit.register(lambda: [p.terminate() for p in procs if p.poll() is None])
 
 def host(msg):
     b = json.dumps(msg).encode()
@@ -50,6 +53,9 @@ for d in ['Mozilla', 'zen']:
 # --- throwaway profile + browser with Marionette
 shutil.rmtree(profile, ignore_errors=True)
 os.makedirs(profile)
+zen_downloads = os.path.join(scratch, 'zen-downloads')
+shutil.rmtree(zen_downloads, ignore_errors=True)
+os.makedirs(zen_downloads)
 with open(os.path.join(profile, 'user.js'), 'w') as f:
     f.write('\n'.join([
         'user_pref("xpinstall.signatures.required", false);',
@@ -60,9 +66,15 @@ with open(os.path.join(profile, 'user.js'), 'w') as f:
         'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
         'user_pref("browser.aboutwelcome.enabled", false);',
         'user_pref("zen.welcome-screen.seen", true);',
+        # Anything the browser keeps lands in the scratch folder, never in ~/Downloads.
+        'user_pref("browser.download.folderList", 2);',
+        f'user_pref("browser.download.dir", "{zen_downloads}");',
+        'user_pref("browser.download.useDownloadDir", true);',
+        'user_pref("browser.download.always_ask_before_handling_new_types", false);',
     ]) + '\n')
 proc = subprocess.Popen([browser, '--marionette', '--headless', '--no-remote', '--profile', profile],
                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+procs.append(proc)
 
 class Marionette:
     def __init__(self, port):
@@ -167,6 +179,28 @@ const done = arguments[arguments.length - 1];
     print('     diagnostics:', json.dumps(diag)[:1500])
 if items:
     check(items[0]['state'] == 'completed', f"download completed: {items[0]['filename']}")
+
+# --- download takeover: a file type that's on no list goes to Castnet, not the browser
+# Opening a link the server marks as a download (Content-Disposition: attachment).
+# Started from a script, so nothing waits for a page that never loads (it becomes a download).
+js(f'window.location.href = "http://127.0.0.1:8765/attach/aonly.mp4?as=notes.qqq&k={time.time()}"; return true')
+taken = None
+for _ in range(40):
+    time.sleep(0.5)
+    # Firefox may correct the extension to match the file's type (notes.qqq → notes.mp4).
+    taken = next((i for i in (host({'type': 'list'}) or {}).get('items', []) if i['filename'].startswith('notes.')), None)
+    if taken and taken['state'] == 'completed': break
+check(bool(taken) and taken['state'] == 'completed', f"a download of an unlisted file type went to Castnet ({taken and taken['state']})")
+time.sleep(2)
+check(not any(f.startswith('notes.') for f in os.listdir(zen_downloads)), 'the browser kept no second copy')
+if not (taken and taken['state'] == 'completed'):
+    m.cmd('Marionette:SetContext', {'value': 'chrome'})
+    popup = m.cmd('WebDriver:ExecuteScript', {'script': 'return WebExtensionPolicy.getByID("castnet@castnet.app").getURL("popup/popup.html")', 'args': []}).get('value')
+    m.cmd('Marionette:SetContext', {'value': 'content'})
+    m.cmd('WebDriver:Navigate', {'url': popup})
+    time.sleep(1)
+    diag = m.cmd('WebDriver:ExecuteAsyncScript', {'script': 'const d = arguments[arguments.length-1]; browser.downloads.search({}).then((l) => d(l.map((x) => ({url: x.url, file: x.filename, state: x.state, error: x.error, by: x.byExtensionId}))), (e) => d(String(e)));', 'args': []}).get('value')
+    print('     browser downloads:', json.dumps(diag)[:1500])
 
 m.cmd('WebDriver:DeleteSession')
 proc.terminate()

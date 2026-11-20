@@ -79,6 +79,8 @@ public struct DownloadRequest: Codable {
     public var useCookies: Bool?
     /// Set when the address was renewed after expiring (resume without If-Range checks).
     public var refreshed: Bool?
+    /// The type the browser saw for a download it handed over (used to check the link).
+    public var mime: String?
 
     public init(url: String, kind: DownloadKind, filename: String? = nil, title: String? = nil, pageUrl: String? = nil,
                 referer: String? = nil, userAgent: String? = nil, headers: [String: String]? = nil,

@@ -111,7 +111,9 @@ async function loadSettings() {
   const { settings } = await send({ type: 'getSettings', url: tab.url });
   $('catchDownloads').checked = !!settings.catchDownloads;
   $('showOverlay').checked = !!settings.showOverlay;
+  $('catchAll').checked = settings.catchAll !== false;
   $('catchExtensions').value = settings.catchExtensions;
+  $('catchExtensions').disabled = $('catchAll').checked;
   $('minMediaSizeKB').value = settings.minMediaSizeKB;
 }
 
@@ -161,6 +163,10 @@ async function checkHostAccess() {
   $('catchDownloads').addEventListener('change', (e) => saveSetting('catchDownloads', e.target.checked));
   $('showOverlay').addEventListener('change', (e) => saveSetting('showOverlay', e.target.checked));
   $('catchExtensions').addEventListener('change', (e) => saveSetting('catchExtensions', e.target.value));
+  $('catchAll').addEventListener('change', (e) => {
+    $('catchExtensions').disabled = e.target.checked;
+    saveSetting('catchAll', e.target.checked);
+  });
   $('minMediaSizeKB').addEventListener('change', (e) => saveSetting('minMediaSizeKB', Math.max(0, Number(e.target.value) || 0)));
 
   setInterval(refresh, 1500);

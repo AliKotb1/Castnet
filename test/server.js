@@ -27,7 +27,7 @@ const MIME = {
   '.mpd': 'application/dash+xml', '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.key': 'application/octet-stream',
 };
 
-function sendFile(req, res, file, { slow = false, expiresAt = 0 } = {}) {
+function sendFile(req, res, file, { slow = false, expiresAt = 0, attachment = '' } = {}) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); return res.end('not found'); }
     const type = MIME[path.extname(file)] || 'application/octet-stream';
@@ -52,6 +52,7 @@ function sendFile(req, res, file, { slow = false, expiresAt = 0 } = {}) {
       'Access-Control-Allow-Origin': '*',
     };
     if (status === 206) headers['Content-Range'] = `bytes ${start}-${end}/${st.size}`;
+    if (attachment) headers['Content-Disposition'] = `attachment; filename="${attachment}"`;
     res.writeHead(status, headers);
     if (req.method === 'HEAD') return res.end();
     stats.active++;
@@ -98,6 +99,7 @@ function livePlaylist(res) {
   res.end(body);
 }
 
+const usedOnce = new Set();
 http.createServer((req, res) => {
   stats.requests++;
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -127,6 +129,24 @@ http.createServer((req, res) => {
     }
     return sendFile(req, res, path.join(root, path.normalize(file)), { slow: true, expiresAt: exp });
   }
+  // Download takeover test page: an unknown type, a tiny file, a one-time link, a file the page makes.
+  if (p === '/takeover.html') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Takeover test</title></head><body>
+<a id="unknown" href="/aonly.mp4?k=${Date.now()}" download="notes.qqq">notes.qqq</a>
+<a id="tiny" href="/player.json?k=${Date.now()}" download="tiny.json">tiny.json</a>
+<a id="once" href="/once/vonly.webm?t=${Date.now()}" download="once.webm">once.webm</a>
+<a id="blob" download="made-here.txt">made-here.txt</a>
+<script>document.getElementById('blob').href = URL.createObjectURL(new Blob(['made by the page'], { type: 'text/plain' }));</script>
+</body></html>`);
+  }
+  // One-time links (like some signed download URLs): the first request works, later ones get 410.
+  if (p.startsWith('/once/')) {
+    const key = p + url.search;
+    if (usedOnce.has(key)) { res.writeHead(410, { 'Content-Type': 'text/plain' }); return res.end('link already used'); }
+    usedOnce.add(key);
+    p = p.slice('/once'.length);
+  }
   if (p === '/api/player.json') p = '/player.json';
   if (p === '/' ) p = '/page.html';
   let slow = false;
@@ -137,7 +157,10 @@ http.createServer((req, res) => {
     p = p.slice('/protected'.length);
   }
   if (p.startsWith('/slow/')) { slow = true; p = p.slice('/slow'.length); }
+  // /attach/<file>?as=<name>: the server says "download this" (Content-Disposition: attachment).
+  let attachment = '';
+  if (p.startsWith('/attach/')) { p = p.slice('/attach'.length); attachment = url.searchParams.get('as') || path.basename(p); }
   const file = path.join(root, path.normalize(p));
   if (!file.startsWith(root)) { res.writeHead(400); return res.end(); }
-  sendFile(req, res, file, { slow });
+  sendFile(req, res, file, { slow, attachment });
 }).listen(port, '127.0.0.1', () => console.log(`test server on http://127.0.0.1:${port} serving ${root}`));

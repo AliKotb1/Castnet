@@ -34,6 +34,8 @@ const PROBE_MIN_BYTES = 16 * 1024;
 
 const DEFAULT_SETTINGS = {
   catchDownloads: true,
+  // Every download goes to Castnet. Off = only the file types below, from minCatchSizeKB up.
+  catchAll: true,
   catchExtensions: 'zip rar 7z tar gz tgz bz2 xz zst dmg pkg iso img exe msi apk ipa deb rpm jar ' +
     'mp4 mkv webm mov avi flv wmv m4v mpg mpeg 3gp mp3 m4a flac wav aac ogg opus wma torrent',
   minCatchSizeKB: 512,
@@ -1028,6 +1030,10 @@ function catchExtSet() {
   return new Set(settings.catchExtensions.toLowerCase().split(/[\s,;|]+/).filter(Boolean));
 }
 
+// Greedy by default: every download the browser starts is handed to Castnet. What stays in the
+// browser is only what can't work anywhere else: files a page made itself (blob:/data:), form
+// (POST) downloads, private windows, downloads already finished, and anything the app checks and
+// can't fetch the same way (a one-time link, a login page instead of the file, a different size).
 chrome.downloads?.onCreated.addListener(async (dl) => {
   await ready;
   if (!settings.catchDownloads || ownDownloads.has(dl.id) || dl.byExtensionId === chrome.runtime.id) return;
@@ -1040,26 +1046,33 @@ chrome.downloads?.onCreated.addListener(async (dl) => {
   if (postedAt && Date.now() - postedAt < 60000) return; // form POST downloads can't be replayed
 
   const named = linkNames.get(url)?.name || '';
-  const nameExt = (/\.([a-z0-9]{1,8})$/i.exec(dl.filename || named)?.[1] || '').toLowerCase();
-  const ext = nameExt || extOf(url) || MIME_EXT[(dl.mime || '').toLowerCase()] || '';
-  if (!catchExtSet().has(ext)) return;
-  if (dl.totalBytes > 0 && dl.totalBytes < settings.minCatchSizeKB * 1024) return;
+  if (!settings.catchAll) {
+    const nameExt = (/\.([a-z0-9]{1,8})$/i.exec(dl.filename || named)?.[1] || '').toLowerCase();
+    const ext = nameExt || extOf(url) || MIME_EXT[(dl.mime || '').toLowerCase()] || '';
+    if (!catchExtSet().has(ext)) return;
+    if (dl.totalBytes > 0 && dl.totalBytes < settings.minCatchSizeKB * 1024) return;
+  }
 
-  // Pause first so no bytes are wasted while we ask the app.
+  // Pause at once so no bytes are wasted while Castnet checks the link. The bridge starts
+  // Castnet if it isn't running, so a closed app no longer lets downloads slip past.
   chrome.downloads.pause(dl.id).catch(() => {});
-  const status = await getAppStatus();
-  if (!status.ok) { chrome.downloads.resume(dl.id).catch(() => {}); return; }
-
-  const filename = (dl.filename || '').split('/').pop() || named || null;
+  const filename = (dl.filename || '').split(/[\\/]/).pop() || named || null;
   const request = {
     url, kind: KIND.FILE, filename, pageUrl: dl.referrer || null, referer: dl.referrer || null,
     userAgent: navigator.userAgent, headers: dl.referrer ? { Referer: dl.referrer } : {},
     cookies: await cookiesFor([url, dl.referrer]), size: dl.totalBytes > 0 ? dl.totalBytes : (dl.fileSize > 0 ? dl.fileSize : null),
+    mime: dl.mime || null,
   };
   try {
-    const res = await sendNative({ type: 'download', request });
+    // verify: Castnet first fetches the start of the file the way it would download it, and only
+    // accepts if that works and matches what the browser got. Then the browser's copy is dropped.
+    const res = await sendNative({ type: 'download', request, verify: true }, 45000);
     if (res?.ok) {
-      await chrome.downloads.cancel(dl.id).catch(() => {});
+      // A small file may have finished in the browser while Castnet checked the link: then delete
+      // the browser's copy too, so the file isn't saved twice.
+      const [now] = await chrome.downloads.search({ id: dl.id }).catch(() => []);
+      if (now?.state === 'complete') await chrome.downloads.removeFile(dl.id).catch(() => {});
+      else await chrome.downloads.cancel(dl.id).catch(() => {});
       await chrome.downloads.erase({ id: dl.id }).catch(() => {});
       return;
     }

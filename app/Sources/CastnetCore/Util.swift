@@ -1,7 +1,7 @@
 import Foundation
 import CommonCrypto
 
-public let castnetVersion = "1.5.2"
+public let castnetVersion = "1.5.3"
 
 public enum CastnetError: LocalizedError {
     case http(Int, String)

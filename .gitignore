@@ -6,3 +6,5 @@ keys/
 vendor/
 private/
 node_modules/
+# Store listing images (large; regenerate when needed)
+docs/store/

@@ -49,7 +49,8 @@
       <summary>Settings</summary>
       <label class="toggle"><input id="catchDownloads" type="checkbox"> Take over browser downloads <span class="hint">(hold ⌥ Option when clicking to skip)</span></label>
       <label class="toggle"><input id="showOverlay" type="checkbox"> Show “Download this video” on videos</label>
-      <label class="field">File types to take over
+      <label class="toggle"><input id="catchAll" type="checkbox"> Every file type <span class="hint">(otherwise only the types below)</span></label>
+      <label class="field">Only these file types
         <textarea id="catchExtensions" rows="3" spellcheck="false"></textarea>
       </label>
       <label class="field inline">Ignore media smaller than

@@ -483,6 +483,39 @@ public final class SegmentedDownloader: NSObject, DownloadEngine, URLSessionData
 
 /// Checks that a renewed link serves the same file as the partly downloaded one:
 /// same total size, and identical bytes for a range we already have.
+/// Before the browser's own copy of a download is dropped, checks that Castnet can fetch the same
+/// file: the server must answer with it (not an error, and not a web page such as a login form), and
+/// its size must match what the browser saw. Only the response headers are read.
+public enum LinkProbe {
+    public static func check(_ r: DownloadRequest, timeout: TimeInterval = 20) async -> (ok: Bool, reason: String?) {
+        guard let url = URL(string: r.url) else { return (false, "Bad link") }
+        let config = RequestContext.sessionConfiguration(maxConnectionsPerHost: 2)
+        config.timeoutIntervalForRequest = timeout
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let req = RequestContext(request: r).makeRequest(url, range: "bytes=0-0", extra: ["Accept-Encoding": "identity"])
+        do {
+            let (bytes, resp) = try await session.bytes(for: req)
+            bytes.task.cancel()
+            guard let http = resp as? HTTPURLResponse else { return (false, "The server didn’t answer") }
+            guard (200..<300).contains(http.statusCode) else { return (false, "The server answered \(http.statusCode) to Castnet") }
+            let total: Int64? = http.statusCode == 206
+                ? http.value(forHTTPHeaderField: "Content-Range")?.split(separator: "/").last.flatMap { Int64($0) }
+                : (http.expectedContentLength > 0 ? http.expectedContentLength : nil)
+            if let want = r.size, want > 0, let got = total, got != want {
+                return (false, "The link gives Castnet a different file (\(got) bytes; the browser has \(want))")
+            }
+            let got = (http.mimeType ?? "").lowercased(), want = (r.mime ?? "").lowercased()
+            if got == "text/html", !want.isEmpty, want != "text/html" {
+                return (false, "The link gives Castnet a web page instead of the file")
+            }
+            return (true, nil)
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+}
+
 public enum LinkVerifier {
     public static func sameFile(newURL: URL, ctx: RequestContext, resume: HTTPResumeState, partURL: URL) async -> Bool {
         let session = URLSession(configuration: RequestContext.sessionConfiguration(maxConnectionsPerHost: 2))
